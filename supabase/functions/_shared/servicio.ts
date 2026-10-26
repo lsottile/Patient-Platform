@@ -38,6 +38,44 @@ export async function rpc<T = unknown>(funcion: string, args: Record<string, unk
   return (texto ? JSON.parse(texto) : null) as T;
 }
 
+export interface AccesoComercialServidor {
+  user_id: string;
+  modalidad: 'general' | 'preferencial' | 'exenta';
+  precio_ars: number;
+  estado: string;
+  mercado_pago_preapproval_id: string | null;
+  mercado_pago_init_point: string | null;
+}
+
+export async function leerAccesoComercial(userId: string): Promise<AccesoComercialServidor | null> {
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/accesos_comerciales?user_id=eq.${encodeURIComponent(userId)}&select=*`,
+    { headers: cabeceras() },
+  );
+  const filas = (await (await verificar(r, 'leer acceso comercial')).json()) as AccesoComercialServidor[];
+  return filas[0] ?? null;
+}
+
+export async function actualizarAccesoComercial(userId: string, cambios: Record<string, unknown>): Promise<void> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/accesos_comerciales?user_id=eq.${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: cabeceras({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(cambios),
+  });
+  await verificar(r, 'actualizar acceso comercial');
+}
+
+export async function versionesLegalesVigentes(): Promise<{ terminos: string; privacidad: string }> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/documentos_legales?vigente=eq.true&select=tipo,version`, {
+    headers: cabeceras(),
+  });
+  const filas = (await (await verificar(r, 'leer documentos legales')).json()) as { tipo: string; version: string }[];
+  const terminos = filas.find((fila) => fila.tipo === 'terminos')?.version;
+  const privacidad = filas.find((fila) => fila.tipo === 'privacidad')?.version;
+  if (!terminos || !privacidad) throw new Error('No hay documentos legales vigentes');
+  return { terminos, privacidad };
+}
+
 export interface EstadoDrive {
   user_id: string;
   email_google: string | null;

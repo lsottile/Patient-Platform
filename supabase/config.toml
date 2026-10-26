@@ -427,3 +427,6 @@ verify_jwt = false
 
 [functions.drive-conectar]
 verify_jwt = true
+
+[functions.suscripcion-crear]
+verify_jwt = true

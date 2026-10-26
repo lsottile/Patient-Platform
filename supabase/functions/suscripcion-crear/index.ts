@@ -1,0 +1,67 @@
+import { crearPreapproval } from '../_shared/mercadopago.ts';
+import {
+  actualizarAccesoComercial,
+  CORS,
+  leerAccesoComercial,
+  respuesta,
+  usuarioDeLaPeticion,
+  versionesLegalesVigentes,
+} from '../_shared/servicio.ts';
+
+function backUrlPermitida(valor: unknown): valor is string {
+  const configurada = Deno.env.get('KINE_APP_URL');
+  if (typeof valor !== 'string' || !configurada) return false;
+  try {
+    const recibida = new URL(valor);
+    const base = new URL(configurada);
+    const rutaBase = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`;
+    return recibida.origin === base.origin && (recibida.pathname === base.pathname || recibida.pathname.startsWith(rutaBase));
+  } catch {
+    return false;
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method !== 'POST') return respuesta({ error: 'Método no permitido' }, 405);
+
+  const usuario = await usuarioDeLaPeticion(req);
+  if (!usuario?.email) return respuesta({ error: 'No autenticado' }, 401);
+
+  try {
+    const cuerpo = await req.json();
+    if (cuerpo?.aceptaTerminos !== true || cuerpo?.aceptaPrivacidad !== true || !backUrlPermitida(cuerpo?.backUrl)) {
+      return respuesta({ error: 'Debes aceptar los documentos vigentes y usar una URL de retorno válida' }, 400);
+    }
+
+    const acceso = await leerAccesoComercial(usuario.id);
+    if (!acceso) return respuesta({ error: 'No existe el acceso comercial de la cuenta' }, 409);
+    if (acceso.modalidad === 'exenta') return respuesta({ error: 'La cuenta está exenta de suscripción' }, 400);
+
+    const versiones = await versionesLegalesVigentes();
+    await actualizarAccesoComercial(usuario.id, {
+      terminos_aceptados_version: versiones.terminos,
+      privacidad_aceptada_version: versiones.privacidad,
+      aceptado_en: new Date().toISOString(),
+    });
+
+    if (acceso.mercado_pago_preapproval_id && acceso.mercado_pago_init_point) {
+      return respuesta({ initPoint: acceso.mercado_pago_init_point });
+    }
+
+    const preapproval = await crearPreapproval({
+      userId: usuario.id,
+      email: usuario.email,
+      amount: acceso.precio_ars,
+      backUrl: cuerpo.backUrl,
+    });
+    await actualizarAccesoComercial(usuario.id, {
+      mercado_pago_preapproval_id: preapproval.id,
+      mercado_pago_init_point: preapproval.initPoint,
+    });
+    return respuesta({ initPoint: preapproval.initPoint });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : 'Error desconocido al crear la suscripción');
+    return respuesta({ error: 'No se pudo iniciar el pago. Intenta nuevamente.' }, 502);
+  }
+});

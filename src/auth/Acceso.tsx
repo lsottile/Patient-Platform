@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { supabase } from '../data/supabase';
 import { recurso, urlApp } from '../rutaBase';
+import { PieLegal } from '../components/PieLegal';
 
 /** Exige sesión iniciada cuando Supabase está configurado. */
 export function Acceso({ children }: { children: (sesion: Session) => ReactNode }) {
@@ -70,6 +71,7 @@ function PantallaIngreso() {
         {mensaje && <p className="aviso aviso--ok">{mensaje}</p>}
         {error && <p className="aviso aviso--error">{error}</p>}
       </div>
+      <PieLegal compacto />
     </main>
   );
 }

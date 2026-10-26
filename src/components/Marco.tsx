@@ -2,10 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect } from 'react';
 import { solicitarPersistencia } from '../data/almacenamiento';
 import { useDatos } from '../data/DatosContext';
-
-/** Repositorio del código. Si publicas una versión modificada, apunta aquí a tu propio código (VITE_URL_CODIGO). */
-const URL_CODIGO = (import.meta.env.VITE_URL_CODIGO as string | undefined) || 'https://github.com/geno-whirl/Patient-Platform';
 import { BotonInstalar, useEnLinea } from './EstadoApp';
+import { PieLegal } from './PieLegal';
 import { InsigniaCarpeta } from './SincronizarCarpeta';
 import { recurso } from '../rutaBase';
 
@@ -70,13 +68,7 @@ export function Marco({ email, onSalir }: { email?: string; onSalir?: () => void
         {error && <p className="aviso aviso--error">{error}</p>}
         {cargando ? <div className="cargando">Cargando datos…</div> : <Outlet />}
       </main>
-      {/* AGPL-3.0 §13: quien usa la app por la red debe poder obtener su código fuente. */}
-      <footer className="pie no-imprimir">
-        <a href={URL_CODIGO} target="_blank" rel="noreferrer">
-          Código fuente
-        </a>{' '}
-        · Licencia AGPL-3.0 · No es un dispositivo médico: el criterio clínico es del profesional.
-      </footer>
+      <PieLegal />
     </div>
   );
 }

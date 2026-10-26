@@ -1666,6 +1666,54 @@ input[type='radio'] {
   color: var(--texto-3);
   text-align: center;
 }
+.pie p {
+  margin: 0.3rem 0 0;
+}
+.pie__enlaces {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.pie--compacto {
+  padding-top: 1rem;
+  padding-bottom: 0;
+}
 .pie a {
   color: inherit;
+}
+.pagina-publica {
+  min-height: 100vh;
+  padding: 2rem 1rem 1rem;
+}
+.documento-legal {
+  max-width: 760px;
+  margin: 0 auto 2rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+.documento-legal__cabecera {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--borde);
+}
+.documento-legal__marca {
+  margin: 0 0 0.3rem;
+  color: var(--primario);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.documento-legal h1 {
+  margin: 0;
+}
+.documento-legal h2 {
+  margin-top: 2rem;
+  font-size: 1.15rem;
+}
+.documento-legal li + li {
+  margin-top: 0.4rem;
 }

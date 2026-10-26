@@ -17,7 +17,9 @@ import { ImprimirPage } from './pages/ImprimirPage';
 import { IngresoPage } from './pages/IngresoPage';
 import { DatosPacientePage, ListaEvaluaciones, ListaIngresos, ListaSesiones, PacienteMarco, ResumenPaciente } from './pages/PacientePage';
 import { PacientesPage } from './pages/PacientesPage';
+import { PrivacidadPage } from './pages/PrivacidadPage';
 import { SesionPage } from './pages/SesionPage';
+import { TerminosPage } from './pages/TerminosPage';
 import { BASE } from './rutaBase';
 
 function Rutas({ ambito, email, onSalir }: { ambito: string; email?: string; onSalir?: () => void }) {
@@ -67,16 +69,21 @@ function AppConSesion({ userId, email }: { userId: string; email?: string }) {
 
 export function App() {
   const local = useMemo(() => new RepositorioLocal(), []);
+  const aplicacion = supabase ? (
+    <Acceso>{(sesion) => <AppConSesion userId={sesion.user.id} email={sesion.user.email} />}</Acceso>
+  ) : (
+    <DatosProvider repositorio={local}>
+      <Rutas ambito="local" />
+    </DatosProvider>
+  );
 
   return (
     <BrowserRouter basename={BASE.replace(/\/$/, '') || '/'}>
-      {supabase ? (
-        <Acceso>{(sesion) => <AppConSesion userId={sesion.user.id} email={sesion.user.email} />}</Acceso>
-      ) : (
-        <DatosProvider repositorio={local}>
-          <Rutas ambito="local" />
-        </DatosProvider>
-      )}
+      <Routes>
+        <Route path="/terminos" element={<TerminosPage />} />
+        <Route path="/privacidad" element={<PrivacidadPage />} />
+        <Route path="/*" element={aplicacion} />
+      </Routes>
     </BrowserRouter>
   );
 }

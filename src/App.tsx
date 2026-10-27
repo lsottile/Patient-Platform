@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Acceso } from './auth/Acceso';
 import { Marco } from './components/Marco';
@@ -21,12 +21,13 @@ import { PrivacidadPage } from './pages/PrivacidadPage';
 import { SesionPage } from './pages/SesionPage';
 import { TerminosPage } from './pages/TerminosPage';
 import { BASE } from './rutaBase';
+import { AccesoComercialGate } from './suscripciones/AccesoComercial';
 
-function Rutas({ ambito, email, onSalir }: { ambito: string; email?: string; onSalir?: () => void }) {
+function Rutas({ ambito, email, onSalir, aviso }: { ambito: string; email?: string; onSalir?: () => void; aviso?: ReactNode }) {
   return (
     <SincronizacionCarpetaProvider ambito={ambito}>
       <Routes>
-        <Route element={<Marco email={email} onSalir={onSalir} />}>
+        <Route element={<Marco email={email} onSalir={onSalir} aviso={aviso} />}>
           <Route index element={<PacientesPage />} />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="centros" element={<CentrosPage />} />
@@ -60,10 +61,14 @@ function Rutas({ ambito, email, onSalir }: { ambito: string; email?: string; onS
 function AppConSesion({ userId, email }: { userId: string; email?: string }) {
   const repositorio = useMemo(() => new RepositorioSupabase(supabase!, userId), [userId]);
   return (
-    // key: al cambiar de usuario se recargan los datos desde cero.
-    <DatosProvider key={userId} repositorio={repositorio}>
-      <Rutas ambito={`supabase:${userId}`} email={email} onSalir={() => supabase!.auth.signOut()} />
-    </DatosProvider>
+    <AccesoComercialGate sb={supabase!} onSalir={() => void supabase!.auth.signOut()}>
+      {({ aviso }) => (
+        // key: al cambiar de usuario se recargan los datos desde cero.
+        <DatosProvider key={userId} repositorio={repositorio}>
+          <Rutas ambito={`supabase:${userId}`} email={email} onSalir={() => void supabase!.auth.signOut()} aviso={aviso} />
+        </DatosProvider>
+      )}
+    </AccesoComercialGate>
   );
 }
 

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { solicitarPersistencia } from '../data/almacenamiento';
 import { useDatos } from '../data/DatosContext';
 import { BotonInstalar, useEnLinea } from './EstadoApp';
@@ -7,7 +8,7 @@ import { PieLegal } from './PieLegal';
 import { InsigniaCarpeta } from './SincronizarCarpeta';
 import { recurso } from '../rutaBase';
 
-export function Marco({ email, onSalir }: { email?: string; onSalir?: () => void }) {
+export function Marco({ email, onSalir, aviso }: { email?: string; onSalir?: () => void; aviso?: ReactNode }) {
   const { db, modo, cargando, error } = useDatos();
   const enLinea = useEnLinea();
   const hayPacientes = db.pacientes.length > 0;
@@ -65,6 +66,7 @@ export function Marco({ email, onSalir }: { email?: string; onSalir?: () => void
         </div>
       </header>
       <main className="contenido">
+        {aviso}
         {error && <p className="aviso aviso--error">{error}</p>}
         {cargando ? <div className="cargando">Cargando datos…</div> : <Outlet />}
       </main>

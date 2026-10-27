@@ -1717,3 +1717,47 @@ input[type='radio'] {
 .documento-legal li + li {
   margin-top: 0.4rem;
 }
+.pagina-suscripcion {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+.suscripcion-caja {
+  width: min(100%, 560px);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+.suscripcion-caja h1 {
+  margin-top: 0;
+}
+.suscripcion-precio {
+  margin: 1.5rem 0;
+  font-size: 1.15rem;
+}
+.casilla-legal {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0.8rem 0;
+}
+.casilla-legal input {
+  flex: none;
+  margin-top: 0.2rem;
+}
+.suscripcion-acciones {
+  margin-top: 1.5rem;
+}
+.aviso-suscripcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 600px) {
+  .aviso-suscripcion {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -45,6 +45,21 @@ export interface AccesoComercialServidor {
   estado: string;
   mercado_pago_preapproval_id: string | null;
   mercado_pago_init_point: string | null;
+  ultimo_pago_id: string | null;
+  ultimo_pago_en: string | null;
+  acceso_hasta: string | null;
+  gracia_hasta: string | null;
+  eliminar_despues_de: string | null;
+  updated_at: string;
+}
+
+export async function leerAccesoPorPreapproval(preapprovalId: string): Promise<AccesoComercialServidor | null> {
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/accesos_comerciales?mercado_pago_preapproval_id=eq.${encodeURIComponent(preapprovalId)}&select=*`,
+    { headers: cabeceras() },
+  );
+  const filas = (await (await verificar(r, 'leer acceso por suscripción')).json()) as AccesoComercialServidor[];
+  return filas[0] ?? null;
 }
 
 export async function leerAccesoComercial(userId: string): Promise<AccesoComercialServidor | null> {

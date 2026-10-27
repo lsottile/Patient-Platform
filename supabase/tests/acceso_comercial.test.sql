@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000001', 'pendiente@example.com'),
@@ -163,6 +163,24 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.registrar_evento_mercado_pago(text,text,text)', 'execute'),
   'service_role puede registrar eventos comerciales'
+);
+select ok(
+  has_function_privilege('service_role', 'public.aplicar_evento_mercado_pago(text,text,text,uuid,jsonb)', 'execute'),
+  'service_role puede aplicar un evento y su cambio de acceso en una transacción'
+);
+select throws_ok(
+  $$select public.aplicar_evento_mercado_pago(
+    'subscription_authorized_payment', 'atomic-fail', 'payment:v1',
+    '00000000-0000-0000-0000-000000000001', '{"estado":"invalido"}'::jsonb
+  )$$,
+  '23514',
+  null,
+  'un cambio comercial inválido revierte toda la RPC'
+);
+select is(
+  (select count(*) from public.eventos_mercado_pago where resource_id = 'atomic-fail'),
+  0::bigint,
+  'el rollback no deja un evento marcado antes de aplicar el acceso'
 );
 
 select * from finish();

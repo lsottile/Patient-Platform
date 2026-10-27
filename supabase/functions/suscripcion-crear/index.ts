@@ -2,7 +2,8 @@ import { crearPreapproval, obtenerPreapproval } from '../_shared/mercadopago.ts'
 import {
   actualizarAccesoComercial,
   CORS,
-  leerAccesoComercial,
+  prepararCheckoutComercial,
+  registrarSuscripcionMercadoPago,
   respuesta,
   usuarioDeLaPeticion,
   versionesLegalesVigentes,
@@ -34,18 +35,9 @@ Deno.serve(async (req) => {
       return respuesta({ error: 'Debes aceptar los documentos vigentes y usar una URL de retorno válida' }, 400);
     }
 
-    const acceso = await leerAccesoComercial(usuario.id);
-    if (!acceso) return respuesta({ error: 'No existe el acceso comercial de la cuenta' }, 409);
-    if (acceso.modalidad === 'exenta') return respuesta({ error: 'La cuenta está exenta de suscripción' }, 400);
-    if (acceso.eliminacion_confirmada_en) return respuesta({ error: 'La eliminación de la cuenta ya fue confirmada' }, 409);
-
     const versiones = await versionesLegalesVigentes();
-    await actualizarAccesoComercial(usuario.id, {
-      terminos_aceptados_version: versiones.terminos,
-      privacidad_aceptada_version: versiones.privacidad,
-      aceptado_en: new Date().toISOString(),
-      eliminacion_reclamada_en: null,
-    });
+    const acceso = await prepararCheckoutComercial(usuario.id, versiones);
+    if (acceso.modalidad === 'exenta') return respuesta({ error: 'La cuenta está exenta de suscripción' }, 400);
 
     let generacion = acceso.checkout_generacion;
     if (acceso.mercado_pago_preapproval_id && acceso.mercado_pago_init_point) {
@@ -74,6 +66,7 @@ Deno.serve(async (req) => {
       backUrl: cuerpo.backUrl,
       idempotencyKey: `${usuario.id}:${generacion}`,
     });
+    await registrarSuscripcionMercadoPago(usuario.id, preapproval.id);
     await actualizarAccesoComercial(usuario.id, {
       mercado_pago_preapproval_id: preapproval.id,
       mercado_pago_init_point: preapproval.initPoint,

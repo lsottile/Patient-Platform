@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(32);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000001', 'pendiente@example.com'),
@@ -170,7 +170,7 @@ select ok(
   'service_role puede registrar eventos comerciales'
 );
 select ok(
-  has_function_privilege('service_role', 'public.aplicar_evento_mercado_pago(text,text,text,uuid,jsonb,timestamptz)', 'execute'),
+  has_function_privilege('service_role', 'public.aplicar_evento_mercado_pago(text,text,text,uuid,jsonb,timestamptz,text,timestamptz,text,text,boolean)', 'execute'),
   'service_role puede aplicar un evento y su cambio de acceso en una transacción'
 );
 select throws_ok(
@@ -206,6 +206,26 @@ select is(
   (select eliminacion_reclamada_en from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000001'),
   null::timestamptz,
   'una reactivación cancela el reclamo de eliminación antes de borrar'
+);
+update public.accesos_comerciales
+set eliminacion_reclamada_en = now() - interval '20 minutes', eliminacion_confirmada_en = now()
+where user_id = '00000000-0000-0000-0000-000000000001';
+select throws_ok(
+  $$select * from public.preparar_checkout_comercial(
+    '00000000-0000-0000-0000-000000000001', '2026-10-26', '2026-10-26'
+  )$$,
+  'P0001',
+  'eliminación de cuenta ya confirmada',
+  'el checkout rechaza atómicamente una eliminación ya confirmada'
+);
+select is(
+  (select terminos_aceptados_version from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000001'),
+  null::text,
+  'el checkout rechazado no registra una aceptación inexistente'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.preparar_checkout_comercial(uuid,text,text)', 'execute'),
+  'solo service_role puede preparar el checkout comercial'
 );
 
 select * from finish();

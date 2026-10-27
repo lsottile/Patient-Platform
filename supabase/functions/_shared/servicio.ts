@@ -60,11 +60,11 @@ export interface AccesoComercialServidor {
 
 export async function leerAccesoPorPreapproval(preapprovalId: string): Promise<AccesoComercialServidor | null> {
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/accesos_comerciales?mercado_pago_preapproval_id=eq.${encodeURIComponent(preapprovalId)}&select=*`,
+    `${SUPABASE_URL}/rest/v1/suscripciones_mercado_pago?preapproval_id=eq.${encodeURIComponent(preapprovalId)}&select=user_id`,
     { headers: cabeceras() },
   );
-  const filas = (await (await verificar(r, 'leer acceso por suscripción')).json()) as AccesoComercialServidor[];
-  return filas[0] ?? null;
+  const filas = (await (await verificar(r, 'leer dueño de suscripción')).json()) as { user_id: string }[];
+  return filas[0] ? await leerAccesoComercial(filas[0].user_id) : null;
 }
 
 export async function leerAccesoComercial(userId: string): Promise<AccesoComercialServidor | null> {
@@ -83,6 +83,23 @@ export async function actualizarAccesoComercial(userId: string, cambios: Record<
     body: JSON.stringify(cambios),
   });
   await verificar(r, 'actualizar acceso comercial');
+}
+
+export async function prepararCheckoutComercial(
+  userId: string,
+  versiones: { terminos: string; privacidad: string },
+): Promise<AccesoComercialServidor> {
+  const filas = await rpc<AccesoComercialServidor[]>('preparar_checkout_comercial', {
+    p_user: userId,
+    p_terminos: versiones.terminos,
+    p_privacidad: versiones.privacidad,
+  });
+  if (!filas[0]) throw new Error('No existe el acceso comercial de la cuenta');
+  return filas[0];
+}
+
+export async function registrarSuscripcionMercadoPago(userId: string, preapprovalId: string): Promise<void> {
+  await rpc('registrar_suscripcion_mercado_pago', { p_user: userId, p_preapproval_id: preapprovalId });
 }
 
 export async function listarObjetosAdjuntos(userId: string): Promise<string[]> {

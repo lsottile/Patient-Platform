@@ -164,4 +164,13 @@ jq -e '
   and .privacidad_aceptada_version == "2026-10-26"
 ' <<<"$acceso" >/dev/null
 
+curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+  -d '{"eliminacion_reclamada_en":"2026-10-27T00:00:00Z","eliminacion_confirmada_en":"2026-10-27T00:10:00Z"}' >/dev/null
+codigo=$(curl -sS -o "$temporal/eliminando.json" -w '%{http_code}' -X POST "$endpoint" \
+  -H "apikey: $anon_key" -H "Authorization: Bearer $jwt" -H 'Content-Type: application/json' \
+  -d "{\"aceptaTerminos\":true,\"aceptaPrivacidad\":true,\"backUrl\":\"$api_url/\"}")
+[ "$codigo" = '502' ]
+[ "$(cat "$temporal/count")" = '2' ]
+
 echo 'suscripcion-crear: contrato e idempotencia OK'

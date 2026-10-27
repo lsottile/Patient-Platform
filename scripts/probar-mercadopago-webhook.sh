@@ -31,6 +31,9 @@ printf 'authorized' >"$temporal/preapproval_status"
 curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
   -d '{"mercado_pago_preapproval_id":"preapproval-test","mercado_pago_init_point":"https://example.test/checkout"}' >/dev/null
+curl -fsS -X POST "$api_url/rest/v1/suscripciones_mercado_pago" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+  -d "{\"preapproval_id\":\"preapproval-test\",\"user_id\":\"$user_id\"}" >/dev/null
 
 cat >"$temporal/mp.py" <<'PY'
 import json
@@ -59,10 +62,10 @@ class Handler(BaseHTTPRequestHandler):
         base_eventos = datetime(2026, 10, 27, 1, 0, 0, tzinfo=timezone.utc)
         if self.path.startswith('/preapproval/'):
             identificador = unquote(self.path.removeprefix('/preapproval/'))
-            if identificador != 'preapproval-test':
+            if identificador not in {'preapproval-test', 'preapproval-new'}:
                 return self.responder({'error': 'not found'}, 404)
             referencia = 'referencia-ajena' if (directorio / 'referencia_invalida').exists() else (directorio / 'user_id').read_text()
-            estado = (directorio / 'preapproval_status').read_text()
+            estado = (directorio / 'preapproval_status').read_text() if identificador == 'preapproval-test' else 'authorized'
             return self.responder({
                 'id': identificador,
                 'status': estado,
@@ -83,19 +86,21 @@ class Handler(BaseHTTPRequestHandler):
                 '1006': 'rejected',
                 '1007': 'approved',
                 '1008': 'approved',
+                '1009': 'approved',
             }
             if identificador not in estados:
                 return self.responder({'error': 'not found'}, 404)
-            desplazamientos = {'1000': -600, '1001': 0, '1002': 60, '1003': 120, '1004': 300, '1005': 240, '1006': -300, '1007': 180, '1008': 180}
+            desplazamientos = {'1000': -600, '1001': 0, '1002': 60, '1003': 120, '1004': 300, '1005': 240, '1006': -300, '1007': 180, '1008': 180, '1009': 400}
             instante = base_eventos + timedelta(seconds=desplazamientos[identificador])
             monto = '1.00' if identificador == '1007' else '50000.00'
             moneda = 'USD' if identificador == '1008' else 'ARS'
-            payment_id = 9001 if identificador in {'1001', '1004'} else int(f'9{identificador}')
+            payment_id = 9001 if identificador in {'1001', '1004'} else 9002 if identificador == '1009' else int(f'9{identificador}')
+            preapproval_id = 'preapproval-new' if identificador == '1009' else 'preapproval-test'
             return self.responder({
                 'id': int(identificador),
                 'type': 'scheduled',
                 'status': 'scheduled',
-                'preapproval_id': 'preapproval-test',
+                'preapproval_id': preapproval_id,
                 'external_reference': (directorio / 'user_id').read_text(),
                 'currency_id': moneda,
                 'transaction_amount': monto,
@@ -220,6 +225,14 @@ codigo=$(notificar subscription_preapproval preapproval-test req-cancelada "$aho
 [ "$codigo" = '200' ]
 [ "$(leer_acceso | jq -r '.estado')" = 'cancelada' ]
 
+# Reemplazar el checkout no borra el vínculo histórico de la suscripción anterior.
+curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+  -d '{"mercado_pago_preapproval_id":"preapproval-new","mercado_pago_init_point":"https://example.test/nuevo"}' >/dev/null
+curl -fsS -X POST "$api_url/rest/v1/suscripciones_mercado_pago" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+  -d "{\"preapproval_id\":\"preapproval-new\",\"user_id\":\"$user_id\"}" >/dev/null
+
 codigo=$(notificar subscription_authorized_payment 1005 req-reintegro-viejo "$ahora")
 [ "$codigo" = '200' ]
 [ "$(leer_acceso | jq -r '.estado')" = 'cancelada' ]
@@ -230,10 +243,15 @@ acceso=$(leer_acceso)
 [ "$(jq -r '.estado' <<<"$acceso")" = 'reintegrada' ]
 [ "$(jq -r '.eliminar_despues_de' <<<"$acceso")" != 'null' ]
 
+# Una aprobación más nueva converge a activa aunque el reintegro anterior haya llegado primero.
+codigo=$(notificar subscription_authorized_payment 1009 req-aprobada-nueva "$ahora")
+[ "$codigo" = '200' ]
+[ "$(leer_acceso | jq -r '.estado')" = 'activa' ]
+
 touch "$temporal/referencia_invalida"
 printf 'authorized' >"$temporal/preapproval_status"
-codigo=$(notificar subscription_preapproval preapproval-test req-referencia "$ahora")
+codigo=$(notificar subscription_preapproval preapproval-new req-referencia "$ahora")
 [ "$codigo" = '400' ]
-[ "$(leer_acceso | jq -r '.estado')" = 'reintegrada' ]
+[ "$(leer_acceso | jq -r '.estado')" = 'activa' ]
 
 echo 'mercadopago-webhook: firma, idempotencia y transiciones OK'

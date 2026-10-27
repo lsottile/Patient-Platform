@@ -20,6 +20,8 @@ const LEEME = `Respaldo completo de la plataforma de fichas kinesiológicas.
 
 Para restaurar: en la app, Datos e IA → Importar respaldo… y elegir este .zip.
 Contiene datos clínicos sensibles: guárdalo en un lugar seguro.
+La Ley 26.529 exige al responsable conservar la historia clínica durante al menos diez años
+desde la última actuación. La eliminación de la copia alojada por Kine no reemplaza esa obligación.
 `;
 
 const limpio = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').trim() || 'archivo';

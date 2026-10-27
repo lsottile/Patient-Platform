@@ -1761,3 +1761,14 @@ input[type='radio'] {
     flex-direction: column;
   }
 }
+.pagina-bloqueo {
+  min-height: 100vh;
+  padding: 2rem 1rem 1rem;
+}
+.bloqueo-contenido {
+  max-width: 760px;
+  margin: 0 auto 2rem;
+}
+.bloqueo-contenido > * + * {
+  margin-top: 1rem;
+}

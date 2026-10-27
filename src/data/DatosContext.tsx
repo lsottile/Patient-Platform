@@ -41,7 +41,7 @@ function claveAdjunto(pacienteId: string, id: string, nombre: string): string {
   return `${pacienteId}/${id}-${base}${extension}`;
 }
 
-export function DatosProvider({ repositorio, children }: { repositorio: Repositorio; children: ReactNode }) {
+export function DatosProvider({ repositorio, children, soloLectura = false }: { repositorio: Repositorio; children: ReactNode; soloLectura?: boolean }) {
   const [db, setDb] = useState<BaseDeDatos>(baseVacia);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +51,9 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
   const eliminados = useRef(new Set<string>());
   const fueEliminado = (r: { id: string; pacienteId?: string }) =>
     eliminados.current.has(r.id) || (!!r.pacienteId && eliminados.current.has(r.pacienteId));
+  const exigirEscritura = useCallback(() => {
+    if (soloLectura) throw new Error('La cuenta está en modo de solo lectura');
+  }, [soloLectura]);
 
   useEffect(() => {
     let vigente = true;
@@ -65,6 +68,7 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
   }, [repositorio]);
 
   const cargarCatalogo = useCallback(async () => {
+    exigirEscritura();
     const { faltantesDelCatalogo } = await import('../domain/catalogo');
     const faltan = await faltantesDelCatalogo(dbRef.current, repositorio.semillaIds);
     await repositorio.guardarVarios('ejercicios', faltan.ejercicios);
@@ -77,20 +81,21 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
       programas: [...prev.programas, ...faltan.programas],
     }));
     return { ejercicios: faltan.ejercicios.length, plantillas: faltan.plantillas.length, programas: faltan.programas.length };
-  }, [repositorio]);
+  }, [repositorio, exigirEscritura]);
 
   // Primera vez: la biblioteca viene prellenada con el catálogo base.
   const catalogoRevisado = useRef(false);
   useEffect(() => {
-    if (cargando || error || catalogoRevisado.current) return;
+    if (soloLectura || cargando || error || catalogoRevisado.current) return;
     catalogoRevisado.current = true;
     if (!db.ejercicios.some((e) => e.predefinido)) {
       cargarCatalogo().catch((e: Error) => setError(`No se pudo cargar el catálogo de ejercicios: ${e.message}`));
     }
-  }, [cargando, error, db.ejercicios, cargarCatalogo]);
+  }, [soloLectura, cargando, error, db.ejercicios, cargarCatalogo]);
 
   const guardar = useCallback(
     async <C extends Coleccion>(c: C, r: RegistroPorColeccion[C]) => {
+      exigirEscritura();
       if (fueEliminado(r as { id: string; pacienteId?: string })) return r;
       const validado = COLECCIONES[c].parse({ ...r, actualizadoEn: ahoraIso() }) as RegistroPorColeccion[C];
       await repositorio.guardar(c, validado);
@@ -104,11 +109,12 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
       });
       return validado;
     },
-    [repositorio],
+    [repositorio, exigirEscritura],
   );
 
   const guardarVarios = useCallback(
     async <C extends Coleccion>(c: C, rs: RegistroPorColeccion[C][]) => {
+      exigirEscritura();
       const t = ahoraIso();
       const validados = rs.map((r) => COLECCIONES[c].parse({ ...r, actualizadoEn: t }) as RegistroPorColeccion[C]);
       validados.forEach((r) => eliminados.current.delete(r.id));
@@ -117,11 +123,12 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
       setDb((prev) => ({ ...prev, [c]: [...(prev[c] as RegistroPorColeccion[C][]).filter((x) => !ids.has(x.id)), ...validados] }));
       return validados;
     },
-    [repositorio],
+    [repositorio, exigirEscritura],
   );
 
   const eliminar = useCallback(
     async (c: Coleccion, id: string) => {
+      exigirEscritura();
       if (c === 'adjuntos') {
         const a = db.adjuntos.find((x) => x.id === id);
         if (a) await repositorio.eliminarArchivos([a.ruta]);
@@ -130,11 +137,12 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
       await repositorio.eliminar(c, [id]);
       setDb((prev) => ({ ...prev, [c]: (prev[c] as { id: string }[]).filter((x) => x.id !== id) }));
     },
-    [db.adjuntos, repositorio],
+    [db.adjuntos, repositorio, exigirEscritura],
   );
 
   const eliminarPaciente = useCallback(
     async (id: string) => {
+      exigirEscritura();
       eliminados.current.add(id);
       await repositorio.eliminarArchivos(db.adjuntos.filter((a) => a.pacienteId === id).map((a) => a.ruta));
       const hijos = ['ingresos', 'evaluaciones', 'sesiones', 'adjuntos'] as const;
@@ -152,11 +160,12 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
         adjuntos: prev.adjuntos.filter((x) => x.pacienteId !== id),
       }));
     },
-    [db, repositorio],
+    [db, repositorio, exigirEscritura],
   );
 
   const subirAdjunto = useCallback(
     async (pacienteId: string, original: File, datos: Partial<Adjunto> = {}) => {
+      exigirEscritura();
       const archivo = await prepararArchivo(original);
       const id = nuevoId();
       const ruta = await repositorio.subirArchivo(claveAdjunto(pacienteId, id, archivo.name), archivo);
@@ -183,7 +192,7 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
         throw e;
       }
     },
-    [guardar, repositorio],
+    [guardar, repositorio, exigirEscritura],
   );
 
   const leerArchivo = useCallback((ruta: string) => repositorio.leerArchivo(ruta), [repositorio]);
@@ -201,6 +210,7 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
   /** Importa un respaldo: agrega o reemplaza registros por id (no borra nada). */
   const importar = useCallback(
     async (datos: unknown, archivos?: Map<string, Blob>) => {
+      exigirEscritura();
       const existentes = new Set(Object.values(db).flatMap((lista) => (lista as { id: string }[]).map((r) => r.id)));
       const adaptado = await adaptarIdsAlDestino(datos as Partial<Record<string, unknown[]>>, repositorio.semillaIds, existentes);
       const entrada = adaptado.entrada as Partial<Record<Coleccion, unknown[]>>;
@@ -231,7 +241,7 @@ export function DatosProvider({ repositorio, children }: { repositorio: Reposito
       setDb(nuevo);
       return { total, archivos: restaurados };
     },
-    [db, repositorio],
+    [db, repositorio, exigirEscritura],
   );
 
   const valor = useMemo<Datos>(

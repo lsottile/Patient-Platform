@@ -3,19 +3,28 @@ import { z } from 'zod';
 import { diasDesdeRespaldo, estadoAlmacenamiento, registrarRespaldo, solicitarPersistencia, tamanoLegible, type EstadoAlmacenamiento } from '../data/almacenamiento';
 import { useDatos } from '../data/DatosContext';
 import { useSincronizacionCarpeta } from '../data/SincronizacionCarpeta';
+import type { EstadoCarpeta } from '../data/SincronizacionCarpeta';
 import { descargar } from '../domain/archivos';
 import { hoy } from '../domain/factories';
 import { crearRespaldoZip, esZip, leerRespaldoZip } from '../domain/respaldoZip';
 import { ExportacionSchema } from '../domain/schema';
 
 /** Respaldo manual (.zip con adjuntos o .json), importación y estado del almacenamiento local. */
-export function SeccionRespaldo() {
-  const { db, modo, exportar, importar, leerArchivo } = useDatos();
+export function SeccionRespaldo({ soloExportar = false }: { soloExportar?: boolean }) {
+  return soloExportar ? <ContenidoRespaldo soloExportar /> : <RespaldoConCarpeta />;
+}
+
+function RespaldoConCarpeta() {
+  const { estado } = useSincronizacionCarpeta();
+  return <ContenidoRespaldo carpeta={estado} />;
+}
+
+function ContenidoRespaldo({ soloExportar = false, carpeta }: { soloExportar?: boolean; carpeta?: EstadoCarpeta }) {
+  const { db, modo, exportar, importar, leerArchivo, cargando } = useDatos();
   const archivo = useRef<HTMLInputElement>(null);
   const [trabajo, setTrabajo] = useState('');
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error' | 'aviso'; texto: string } | null>(null);
-  const [dias, setDias] = useState(() => diasDesdeRespaldo());
-  const { estado: carpeta } = useSincronizacionCarpeta();
+  const [dias, setDias] = useState(() => (soloExportar ? null : diasDesdeRespaldo()));
 
   const descargarZip = async () => {
     setMensaje(null);
@@ -71,39 +80,44 @@ export function SeccionRespaldo() {
           ? 'Estás en modo local: los datos y los adjuntos viven solo en este navegador. Descarga un respaldo completo periódicamente y guárdalo en un lugar seguro.'
           : 'Tus datos se guardan en la nube (Supabase). Igual puedes descargar un respaldo completo cuando quieras.'}
       </p>
-      {modo === 'local' && carpeta.tipo === 'activa' && !carpeta.error && (
+      {!soloExportar && modo === 'local' && carpeta?.tipo === 'activa' && !carpeta.error && (
         <p className="tenue">Respaldo continuo activo: los datos y adjuntos se copian a la carpeta “{carpeta.carpeta}” (ver abajo).</p>
       )}
-      {modo === 'local' && (carpeta.tipo !== 'activa' || !!carpeta.error) && (
+      {!soloExportar && modo === 'local' && carpeta && (carpeta.tipo !== 'activa' || !!carpeta.error) && (
         <p className={dias == null || dias > 7 ? 'aviso aviso--aviso' : 'tenue'}>
           {dias == null ? 'Aún no has descargado un respaldo completo en este navegador.' : `Último respaldo completo: ${dias === 0 ? 'hoy' : `hace ${dias} día(s)`}.`}
         </p>
       )}
       <div className="acciones acciones--izq">
-        <button className="boton boton--primario" onClick={descargarZip} disabled={!!trabajo}>
+        <button className="boton boton--primario" onClick={descargarZip} disabled={!!trabajo || cargando}>
           Descargar respaldo completo (.zip, con adjuntos)
         </button>
-        <button className="boton" onClick={() => descargar(`respaldo-kine-${hoy()}.json`, JSON.stringify(exportar(), null, 2))} disabled={!!trabajo}>
-          Solo datos (.json)
-        </button>
-        <button className="boton" onClick={() => archivo.current?.click()} disabled={!!trabajo}>
-          Importar respaldo…
-        </button>
-        <input ref={archivo} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(e) => alImportar(e.target.files?.[0])} />
-        <button
-          className="boton"
-          onClick={() => descargar('esquema-kine.json', JSON.stringify(z.toJSONSchema(ExportacionSchema, { io: 'input' }), null, 2))}
-        >
-          Descargar esquema de datos (JSON Schema)
-        </button>
+        {!soloExportar && (
+          <>
+            <button className="boton" onClick={() => descargar(`respaldo-kine-${hoy()}.json`, JSON.stringify(exportar(), null, 2))} disabled={!!trabajo}>
+              Solo datos (.json)
+            </button>
+            <button className="boton" onClick={() => archivo.current?.click()} disabled={!!trabajo}>
+              Importar respaldo…
+            </button>
+            <input ref={archivo} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(e) => alImportar(e.target.files?.[0])} />
+            <button
+              className="boton"
+              onClick={() => descargar('esquema-kine.json', JSON.stringify(z.toJSONSchema(ExportacionSchema, { io: 'input' }), null, 2))}
+            >
+              Descargar esquema de datos (JSON Schema)
+            </button>
+          </>
+        )}
       </div>
       {trabajo && <p className="aviso">{trabajo}</p>}
       {mensaje && <p className={`aviso aviso--${mensaje.tipo}`}>{mensaje.texto}</p>}
       <p className="tenue">
-        El .zip incluye los datos y el archivo de cada adjunto ({db.adjuntos.length}); el .json solo los datos. Importar agrega o
-        actualiza registros por id (no borra nada) y, desde un .zip, restaura también los archivos.
+        {soloExportar
+          ? `El .zip incluye todos los datos y el archivo de cada adjunto (${db.adjuntos.length}).`
+          : `El .zip incluye los datos y el archivo de cada adjunto (${db.adjuntos.length}); el .json solo los datos. Importar agrega o actualiza registros por id (no borra nada) y, desde un .zip, restaura también los archivos.`}
       </p>
-      {modo === 'local' && <EstadoAlmacenamientoLocal />}
+      {!soloExportar && modo === 'local' && <EstadoAlmacenamientoLocal />}
     </section>
   );
 }

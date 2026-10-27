@@ -1,4 +1,4 @@
-import { zipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { crearRespaldoZip, leerRespaldoZip, rutaEnZip } from '../respaldoZip';
 import type { Adjunto, Exportacion } from '../schema';
@@ -53,6 +53,9 @@ describe('respaldo .zip', () => {
       expect(new Uint8Array(await leido.archivos.get(id)!.arrayBuffer())).toEqual(contenidos[id]);
     }
     expect(leido.archivos.get('a1')!.type).toBe('application/pdf');
+    const leeme = new TextDecoder().decode(unzipSync(new Uint8Array(await r.zip.arrayBuffer()))['LEEME.txt']);
+    expect(leeme).toMatch(/datos clínicos sensibles/i);
+    expect(leeme).toMatch(/diez años/i);
   });
 
   it('informa los adjuntos cuyo archivo no está disponible y respalda el resto', async () => {

@@ -22,6 +22,7 @@ import { SesionPage } from './pages/SesionPage';
 import { TerminosPage } from './pages/TerminosPage';
 import { BASE } from './rutaBase';
 import { AccesoComercialGate } from './suscripciones/AccesoComercial';
+import { PantallaBloqueo } from './suscripciones/PantallaBloqueo';
 
 function Rutas({ ambito, email, onSalir, aviso }: { ambito: string; email?: string; onSalir?: () => void; aviso?: ReactNode }) {
   return (
@@ -61,7 +62,11 @@ function Rutas({ ambito, email, onSalir, aviso }: { ambito: string; email?: stri
 function AppConSesion({ userId, email }: { userId: string; email?: string }) {
   const repositorio = useMemo(() => new RepositorioSupabase(supabase!, userId), [userId]);
   return (
-    <AccesoComercialGate sb={supabase!} onSalir={() => void supabase!.auth.signOut()}>
+    <AccesoComercialGate
+      sb={supabase!}
+      onSalir={() => void supabase!.auth.signOut()}
+      renderBloqueada={(contexto) => <PantallaBloqueo {...contexto} repositorio={repositorio} email={email} />}
+    >
       {({ aviso }) => (
         // key: al cambiar de usuario se recargan los datos desde cero.
         <DatosProvider key={userId} repositorio={repositorio}>

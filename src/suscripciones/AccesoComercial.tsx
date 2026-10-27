@@ -21,6 +21,16 @@ export interface ContextoBloqueo {
   onSalir: () => void;
 }
 
+const MAX_TIMEOUT = 2_147_000_000;
+
+export function demoraHastaLimite(acceso: AccesoComercial, ahora: Date): number | null {
+  const valor = acceso.estado === 'gracia' ? acceso.graciaHasta : acceso.estado === 'cancelada' ? acceso.accesoHasta : null;
+  if (!valor) return null;
+  const limite = Date.parse(valor);
+  if (!Number.isFinite(limite)) return null;
+  return Math.min(Math.max(0, limite - ahora.getTime()) + 25, MAX_TIMEOUT);
+}
+
 export function AccesoComercialGate({
   sb,
   onSalir,
@@ -53,6 +63,19 @@ export function AccesoComercialGate({
     const alRecuperarFoco = () => void recargar();
     window.addEventListener('focus', alRecuperarFoco);
     return () => window.removeEventListener('focus', alRecuperarFoco);
+  }, [recargar]);
+
+  useEffect(() => {
+    if (!acceso) return;
+    const demora = demoraHastaLimite(acceso, ahora);
+    if (demora === null) return;
+    const temporizador = window.setTimeout(() => void recargar(), demora);
+    return () => window.clearTimeout(temporizador);
+  }, [acceso, ahora, recargar]);
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => void recargar(), 60_000);
+    return () => window.clearInterval(intervalo);
   }, [recargar]);
 
   const pagar = useCallback(async () => {

@@ -130,7 +130,7 @@ El workflow `.github/workflows/pages.yml` corre los tests, compila y publica la 
 
 1. Activa Pages una sola vez: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
 2. Para usar Supabase y Drive en la versión publicada, define en *Settings → Secrets and variables → Actions → **Variables***:
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_CLIENT_ID` y `VITE_URL_CODIGO`. Son valores públicos por diseño; la seguridad la da RLS. Sin Supabase, la app publicada funciona en modo local.
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_GOOGLE_CLIENT_ID`. Son valores públicos por diseño; la seguridad la da RLS. El workflow genera `VITE_URL_CODIGO` con el commit exacto desplegado. Sin Supabase, la app publicada funciona en modo local.
 3. Agrega la URL publicada en los lugares donde se autoriza el regreso:
    - Supabase → *Authentication → URL Configuration*: `https://lsottile.github.io/Patient-Platform/`
    - Google Cloud → URI de redireccionamiento: `https://lsottile.github.io/Patient-Platform/datos`

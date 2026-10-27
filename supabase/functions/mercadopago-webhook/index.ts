@@ -82,25 +82,23 @@ async function procesarPago(pago: PagoAutorizadoMercadoPago): Promise<{
   acceso: AccesoComercialServidor;
   accion: string;
   cambios: Record<string, unknown>;
+  eventoPagoEn: string;
 }> {
   const acceso = await leerAccesoPorPreapproval(pago.preapproval_id);
   if (!acceso) throw new PeticionInvalida('Suscripción desconocida');
   const preapproval = await obtenerPreapproval(pago.preapproval_id);
   validarSuscripcion(preapproval, acceso);
-  if (pago.payment.transaction_amount !== acceso.precio_ars || pago.payment.currency_id !== 'ARS') {
+  if (pago.transaction_amount !== acceso.precio_ars || pago.currency_id !== 'ARS') {
     throw new PeticionInvalida('El pago no coincide con el precio de la cuenta');
   }
 
   const cambios: Record<string, unknown> = {};
-  const pagoId = String(pago.payment.id);
-  const pagoEn = pago.payment.date_approved ?? pago.debit_date;
+  const pagoId = pago.payment.id;
+  const pagoEn = pago.debit_date;
   switch (pago.payment.status) {
     case 'approved': {
       const preapprovalCancelada = ['cancelled', 'canceled'].includes(preapproval.status);
-      const pagoAnterior = fecha(acceso.ultimo_pago_en);
-      const pagoActual = fecha(pagoEn);
-      const eventoViejo = pagoAnterior && pagoActual && pagoActual.getTime() <= pagoAnterior.getTime();
-      if (!preapprovalCancelada && !eventoViejo) {
+      if (!preapprovalCancelada) {
         cambios.estado = 'activa';
         cambios.acceso_hasta = fecha(preapproval.next_payment_date)?.toISOString() ?? sumarMes(pago.debit_date);
         cambios.gracia_hasta = null;
@@ -111,7 +109,7 @@ async function procesarPago(pago: PagoAutorizadoMercadoPago): Promise<{
       break;
     }
     case 'rejected':
-      if (!['cancelada', 'reintegrada'].includes(acceso.estado)) {
+      if (acceso.ultimo_pago_id && !['pendiente', 'cancelada', 'reintegrada'].includes(acceso.estado)) {
         cambios.estado = 'gracia';
         cambios.gracia_hasta = acceso.estado === 'gracia' && acceso.gracia_hasta ? acceso.gracia_hasta : sumarDias(pago.debit_date, 4);
       }
@@ -130,7 +128,7 @@ async function procesarPago(pago: PagoAutorizadoMercadoPago): Promise<{
     default:
       throw new PeticionInvalida('Estado de pago desconocido');
   }
-  return { acceso, accion: `payment:${pago.last_modified ?? pago.payment.status}`, cambios };
+  return { acceso, accion: `payment:${pago.last_modified}`, cambios, eventoPagoEn: pago.last_modified };
 }
 
 Deno.serve(async (req) => {
@@ -166,6 +164,7 @@ Deno.serve(async (req) => {
       p_accion: resultado.accion,
       p_user_id: resultado.acceso.user_id,
       p_cambios: resultado.cambios,
+      p_evento_pago_en: 'eventoPagoEn' in resultado ? resultado.eventoPagoEn : null,
     });
     if (!aplicado) return respuesta({ ok: true, duplicado: true });
     return respuesta({ ok: true });

@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(29);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000001', 'pendiente@example.com'),
@@ -95,6 +95,11 @@ select results_eq(
   array['pendiente'::text],
   'el titular puede consultar su estado efectivo'
 );
+select is(
+  public.puede_escribir('00000000-0000-0000-0000-000000000003'),
+  false,
+  'un usuario autenticado no puede consultar el acceso comercial ajeno'
+);
 
 set local request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
 select lives_ok(
@@ -165,13 +170,13 @@ select ok(
   'service_role puede registrar eventos comerciales'
 );
 select ok(
-  has_function_privilege('service_role', 'public.aplicar_evento_mercado_pago(text,text,text,uuid,jsonb)', 'execute'),
+  has_function_privilege('service_role', 'public.aplicar_evento_mercado_pago(text,text,text,uuid,jsonb,timestamptz)', 'execute'),
   'service_role puede aplicar un evento y su cambio de acceso en una transacción'
 );
 select throws_ok(
   $$select public.aplicar_evento_mercado_pago(
     'subscription_authorized_payment', 'atomic-fail', 'payment:v1',
-    '00000000-0000-0000-0000-000000000001', '{"estado":"invalido"}'::jsonb
+    '00000000-0000-0000-0000-000000000001', '{"estado":"invalido"}'::jsonb, now()
   )$$,
   '23514',
   null,
@@ -181,6 +186,26 @@ select is(
   (select count(*) from public.eventos_mercado_pago where resource_id = 'atomic-fail'),
   0::bigint,
   'el rollback no deja un evento marcado antes de aplicar el acceso'
+);
+update public.accesos_comerciales
+set estado = 'reintegrada', eliminar_despues_de = now() - interval '1 day'
+where user_id = '00000000-0000-0000-0000-000000000001';
+select is(
+  (select count(*) from public.cuentas_vencidas_para_eliminar()),
+  0::bigint,
+  'la primera fase solo reclama una cuenta y todavía no la entrega para borrar'
+);
+update public.accesos_comerciales set estado = 'activa'
+where user_id = '00000000-0000-0000-0000-000000000001';
+select is(
+  (select count(*) from public.cuentas_vencidas_para_eliminar()),
+  0::bigint,
+  'la cuenta reactivada no se entrega a la limpieza'
+);
+select is(
+  (select eliminacion_reclamada_en from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000001'),
+  null::timestamptz,
+  'una reactivación cancela el reclamo de eliminación antes de borrar'
 );
 
 select * from finish();

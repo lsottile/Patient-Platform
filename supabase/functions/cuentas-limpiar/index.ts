@@ -18,14 +18,17 @@ Deno.serve(async (req) => {
     let eliminadas = 0;
     let errores = 0;
     for (const cuenta of vencidas) {
+      let etapa = 'listar-storage';
       try {
         const objetos = await listarObjetosAdjuntos(cuenta.user_id);
+        etapa = 'borrar-storage';
         await borrarObjetosAdjuntos(objetos);
+        etapa = 'borrar-auth';
         await borrarUsuario(cuenta.user_id);
         eliminadas += 1;
-      } catch (e) {
+      } catch {
         errores += 1;
-        console.error('No se pudo eliminar una cuenta vencida:', e instanceof Error ? e.message : 'error desconocido');
+        console.error(JSON.stringify({ evento: 'limpieza_cuenta_fallida', userId: cuenta.user_id, etapa }));
       }
     }
     return respuesta({ revisadas: vencidas.length, eliminadas, errores });

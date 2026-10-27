@@ -107,10 +107,9 @@ En **Settings → Secrets and variables → Actions → Variables** configurá s
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon key>
 VITE_GOOGLE_CLIENT_ID=<client id público, si se usa Drive>
-VITE_URL_CODIGO=https://github.com/<usuario>/<repositorio>
 ```
 
-`VITE_URL_CODIGO` debe apuntar al repositorio público que contiene el código exacto desplegado bajo AGPL-3.0. Luego ejecutá el workflow **Publicar en GitHub Pages**.
+El workflow fija `VITE_URL_CODIGO` automáticamente en `https://github.com/<repositorio>/tree/<commit>`, de modo que el enlace publique el código exacto desplegado bajo AGPL-3.0. Luego ejecutá **Publicar en GitHub Pages**.
 
 Abrí sin sesión `/terminos` y `/privacidad`. En login, documentos, aplicación y bloqueo, verificá que **Código fuente** apunte al fork correcto.
 
@@ -177,7 +176,8 @@ La solicitud anticipada llega a `lucianodsottile@gmail.com`. Verificá identidad
 
 ```sql
 update public.accesos_comerciales
-set eliminar_despues_de = now()
+set eliminar_despues_de = now(),
+    eliminacion_reclamada_en = now() - interval '10 minutes'
 where user_id = '<UUID_SOLICITANTE>'::uuid
   and not public.puede_escribir(user_id);
 ```
@@ -192,7 +192,7 @@ curl --fail --request POST \
   --data '{}'
 ```
 
-La respuesta solo informa `revisadas`, `eliminadas` y `errores`. Storage se elimina antes que Auth. Un fallo conserva el usuario para reintentar en la próxima ejecución. Kine no puede borrar ZIP descargados, carpetas sincronizadas ni archivos del Drive controlado por la persona usuaria.
+La limpieza automática reclama primero la cuenta y espera al menos diez minutos antes de confirmar el borrado; una reactivación durante esa ventana cancela el reclamo. En la solicitud anticipada, la sentencia anterior deja cumplida esa espera porque identidad y voluntad ya fueron verificadas manualmente. La respuesta solo informa `revisadas`, `eliminadas` y `errores`. Storage se elimina antes que Auth. Un fallo conserva el usuario para reintentar en la próxima ejecución. Kine no puede borrar ZIP descargados, carpetas sincronizadas ni archivos del Drive controlado por la persona usuaria.
 
 ## 8. Monitoreo y recuperación
 

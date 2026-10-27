@@ -52,6 +52,10 @@ export interface AccesoComercialServidor {
   gracia_hasta: string | null;
   eliminar_despues_de: string | null;
   updated_at: string;
+  checkout_generacion: number;
+  ultimo_evento_pago_en: string | null;
+  eliminacion_reclamada_en: string | null;
+  eliminacion_confirmada_en: string | null;
 }
 
 export async function leerAccesoPorPreapproval(preapprovalId: string): Promise<AccesoComercialServidor | null> {

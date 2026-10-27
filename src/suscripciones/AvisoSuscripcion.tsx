@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { estadoEfectivo } from './estado';
 import type { AccesoComercial } from './tipos';
 
@@ -18,30 +20,36 @@ export function fechaArgentina(iso: string): string {
 }
 
 export function AvisoSuscripcion({ acceso, ahora, onPagar }: { acceso: AccesoComercial; ahora: Date; onPagar: () => void }) {
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [aceptaPrivacidad, setAceptaPrivacidad] = useState(false);
   const estado = estadoEfectivo(acceso, ahora);
+  let mensaje: string | null = null;
+  let accion = '';
   if (estado === 'transicion') {
-    return (
-      <aside className="aviso-suscripcion aviso aviso--aviso">
-        <span>Activá tu suscripción preferencial por {precioArs(acceso.precioArs)} al mes.</span>
-        <button className="boton boton--chico" onClick={onPagar}>Activar suscripción</button>
-      </aside>
-    );
+    mensaje = `Activá tu suscripción preferencial por ${precioArs(acceso.precioArs)} al mes.`;
+    accion = 'Activar suscripción';
+  } else if (estado === 'gracia' && acceso.graciaHasta) {
+    mensaje = `El cobro fue rechazado. Podés usar Kine hasta el ${fechaArgentina(acceso.graciaHasta)}.`;
+    accion = 'Regularizar pago';
+  } else if (estado === 'cancelada_vigente' && acceso.accesoHasta) {
+    mensaje = `La suscripción está cancelada; conservás el acceso hasta el ${fechaArgentina(acceso.accesoHasta)}.`;
+    accion = 'Reactivar';
   }
-  if (estado === 'gracia' && acceso.graciaHasta) {
-    return (
-      <aside className="aviso-suscripcion aviso aviso--aviso">
-        <span>El cobro fue rechazado. Podés usar Kine hasta el {fechaArgentina(acceso.graciaHasta)}.</span>
-        <button className="boton boton--chico" onClick={onPagar}>Regularizar pago</button>
-      </aside>
-    );
-  }
-  if (estado === 'cancelada_vigente' && acceso.accesoHasta) {
-    return (
-      <aside className="aviso-suscripcion aviso aviso--aviso">
-        <span>La suscripción está cancelada; conservás el acceso hasta el {fechaArgentina(acceso.accesoHasta)}.</span>
-        <button className="boton boton--chico" onClick={onPagar}>Reactivar</button>
-      </aside>
-    );
-  }
-  return null;
+  if (!mensaje) return null;
+  return (
+    <aside className="aviso-suscripcion aviso aviso--aviso">
+      <div className="aviso-suscripcion__contenido">
+        <span>{mensaje}</span>
+        <label className="casilla-legal casilla-legal--compacta">
+          <input type="checkbox" checked={aceptaTerminos} onChange={(e) => setAceptaTerminos(e.target.checked)} />
+          <span>Acepto los <Link to="/terminos">Términos</Link>.</span>
+        </label>
+        <label className="casilla-legal casilla-legal--compacta">
+          <input type="checkbox" checked={aceptaPrivacidad} onChange={(e) => setAceptaPrivacidad(e.target.checked)} />
+          <span>Acepto la <Link to="/privacidad">Política de Privacidad</Link>.</span>
+        </label>
+      </div>
+      <button className="boton boton--chico" disabled={!aceptaTerminos || !aceptaPrivacidad} onClick={onPagar}>{accion}</button>
+    </aside>
+  );
 }

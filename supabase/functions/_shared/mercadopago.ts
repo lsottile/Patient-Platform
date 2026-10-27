@@ -26,17 +26,16 @@ export interface PagoAutorizadoMercadoPago {
   status: string;
   preapproval_id: string;
   debit_date: string;
-  last_modified?: string | null;
+  last_modified: string;
+  transaction_amount: number;
+  currency_id: string;
   payment: {
-    id: string | number;
+    id: string;
     status: string;
-    transaction_amount: number;
-    currency_id: string;
-    date_approved?: string | null;
   };
 }
 
-async function obtener<T>(ruta: string, validar: (valor: unknown) => valor is T): Promise<T> {
+async function obtener<T>(ruta: string, convertir: (valor: unknown) => T | null): Promise<T> {
   const token = Deno.env.get('MP_ACCESS_TOKEN');
   if (!token) throw new Error('Mercado Pago no está configurado');
   const r = await fetch(`${API_MERCADO_PAGO}${ruta}`, {
@@ -45,48 +44,64 @@ async function obtener<T>(ruta: string, validar: (valor: unknown) => valor is T)
   });
   if (!r.ok) throw new Error(`Mercado Pago no permitió consultar el recurso (${r.status})`);
   const cuerpo: unknown = await r.json();
-  if (!validar(cuerpo)) throw new Error('Mercado Pago devolvió un recurso inválido');
-  return cuerpo;
+  const convertido = convertir(cuerpo);
+  if (!convertido) throw new Error('Mercado Pago devolvió un recurso inválido');
+  return convertido;
 }
 
 const esObjeto = (valor: unknown): valor is Record<string, unknown> => typeof valor === 'object' && valor !== null;
+const idTexto = (valor: unknown) => (typeof valor === 'string' || typeof valor === 'number' ? String(valor) : null);
+const numero = (valor: unknown) => {
+  if (typeof valor !== 'number' && typeof valor !== 'string') return null;
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido : null;
+};
 
-function esPreapproval(valor: unknown): valor is PreapprovalMercadoPago {
-  if (!esObjeto(valor) || !esObjeto(valor.auto_recurring)) return false;
-  return (
-    typeof valor.id === 'string' &&
-    typeof valor.status === 'string' &&
-    typeof valor.external_reference === 'string' &&
-    typeof valor.auto_recurring.transaction_amount === 'number' &&
-    typeof valor.auto_recurring.currency_id === 'string'
-  );
+function convertirPreapproval(valor: unknown): PreapprovalMercadoPago | null {
+  if (!esObjeto(valor) || !esObjeto(valor.auto_recurring)) return null;
+  const id = idTexto(valor.id);
+  const monto = numero(valor.auto_recurring.transaction_amount);
+  if (!id || monto === null || typeof valor.status !== 'string' || typeof valor.external_reference !== 'string' || typeof valor.auto_recurring.currency_id !== 'string') return null;
+  return {
+    id,
+    status: valor.status,
+    external_reference: valor.external_reference,
+    auto_recurring: { transaction_amount: monto, currency_id: valor.auto_recurring.currency_id },
+    next_payment_date: typeof valor.next_payment_date === 'string' ? valor.next_payment_date : null,
+    last_modified: typeof valor.last_modified === 'string' ? valor.last_modified : null,
+  };
 }
 
-function esPagoAutorizado(valor: unknown): valor is PagoAutorizadoMercadoPago {
-  if (!esObjeto(valor) || !esObjeto(valor.payment)) return false;
-  return (
-    typeof valor.id === 'string' &&
-    typeof valor.status === 'string' &&
-    typeof valor.preapproval_id === 'string' &&
-    typeof valor.debit_date === 'string' &&
-    (typeof valor.payment.id === 'string' || typeof valor.payment.id === 'number') &&
-    typeof valor.payment.status === 'string' &&
-    typeof valor.payment.transaction_amount === 'number' &&
-    typeof valor.payment.currency_id === 'string'
-  );
+function convertirPagoAutorizado(valor: unknown): PagoAutorizadoMercadoPago | null {
+  if (!esObjeto(valor) || !esObjeto(valor.payment)) return null;
+  const id = idTexto(valor.id);
+  const pagoId = idTexto(valor.payment.id);
+  const monto = numero(valor.transaction_amount);
+  if (!id || !pagoId || monto === null || typeof valor.status !== 'string' || typeof valor.preapproval_id !== 'string' || typeof valor.debit_date !== 'string' || typeof valor.last_modified !== 'string' || typeof valor.currency_id !== 'string' || typeof valor.payment.status !== 'string') return null;
+  return {
+    id,
+    status: valor.status,
+    preapproval_id: valor.preapproval_id,
+    debit_date: valor.debit_date,
+    last_modified: valor.last_modified,
+    transaction_amount: monto,
+    currency_id: valor.currency_id,
+    payment: { id: pagoId, status: valor.payment.status },
+  };
 }
 
 export const obtenerPreapproval = (id: string) =>
-  obtener(`/preapproval/${encodeURIComponent(id)}`, esPreapproval);
+  obtener(`/preapproval/${encodeURIComponent(id)}`, convertirPreapproval);
 
 export const obtenerPagoAutorizado = (id: string) =>
-  obtener(`/authorized_payments/${encodeURIComponent(id)}`, esPagoAutorizado);
+  obtener(`/authorized_payments/${encodeURIComponent(id)}`, convertirPagoAutorizado);
 
 export async function crearPreapproval(input: {
   userId: string;
   email: string;
   amount: number;
   backUrl: string;
+  idempotencyKey: string;
 }): Promise<PreapprovalCreada> {
   const token = Deno.env.get('MP_ACCESS_TOKEN');
   if (!token) throw new Error('Mercado Pago no está configurado');
@@ -96,7 +111,7 @@ export async function crearPreapproval(input: {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'X-Idempotency-Key': input.userId,
+      'X-Idempotency-Key': input.idempotencyKey,
     },
     signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({

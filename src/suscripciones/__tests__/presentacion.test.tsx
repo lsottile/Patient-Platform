@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AvisoSuscripcion } from '../AvisoSuscripcion';
 import { estadoEfectivo } from '../estado';
 import { PantallaSuscripcion } from '../PantallaSuscripcion';
+import { demoraHastaLimite } from '../AccesoComercial';
 import type { AccesoComercial, EstadoComercial, ModalidadComercial } from '../tipos';
 
 const acceso = (
@@ -45,6 +46,8 @@ describe('presentación del acceso comercial', () => {
 
     expect(html).toContain('ARS 15.000');
     expect(html).toContain('Activar suscripción');
+    expect((html.match(/type="checkbox"/g) ?? [])).toHaveLength(2);
+    expect(html).toContain('disabled=""');
   });
 
   it('la gracia informa la fecha y hora argentina exactas de bloqueo', () => {
@@ -94,5 +97,12 @@ describe('presentación del acceso comercial', () => {
     const retornoManipulado = new URL('https://kine.example/?status=approved&payment_id=falso');
     expect(retornoManipulado.searchParams.get('status')).toBe('approved');
     expect(estadoEfectivo(acceso('pendiente'), new Date())).toBe('pendiente');
+  });
+
+  it('programa una actualización exactamente al vencer la gracia o el período cancelado', () => {
+    const ahora = new Date('2026-11-10T12:00:00.000Z');
+    expect(demoraHastaLimite(acceso('gracia', { graciaHasta: '2026-11-10T13:00:00.000Z' }), ahora)).toBe(3_600_025);
+    expect(demoraHastaLimite(acceso('cancelada', { accesoHasta: '2026-11-10T12:00:01.000Z' }), ahora)).toBe(1_025);
+    expect(demoraHastaLimite(acceso('activa'), ahora)).toBeNull();
   });
 });

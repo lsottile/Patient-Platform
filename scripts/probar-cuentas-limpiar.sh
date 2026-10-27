@@ -30,15 +30,17 @@ crear_usuario() {
 vencido=$(crear_usuario 'vencido@example.com')
 futuro=$(crear_usuario 'futuro@example.com')
 reactivado=$(crear_usuario 'reactivado@example.com')
+reactivado_durante_reclamo=$(crear_usuario 'reactivado-reclamo@example.com')
 
 actualizar_acceso() {
   curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$1" \
     -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
     -d "$2" >/dev/null
 }
-actualizar_acceso "$vencido" '{"estado":"reintegrada","eliminar_despues_de":"2020-01-01T00:00:00Z"}'
+actualizar_acceso "$vencido" '{"estado":"reintegrada","eliminar_despues_de":"2020-01-01T00:00:00Z","eliminacion_reclamada_en":"2020-01-01T00:00:00Z"}'
 actualizar_acceso "$futuro" '{"estado":"reintegrada","eliminar_despues_de":"2099-01-01T00:00:00Z"}'
 actualizar_acceso "$reactivado" '{"estado":"activa","eliminar_despues_de":"2020-01-01T00:00:00Z"}'
+actualizar_acceso "$reactivado_durante_reclamo" '{"estado":"reintegrada","eliminar_despues_de":"2020-01-01T00:00:00Z"}'
 
 curl -fsS -X POST "$api_url/storage/v1/object/adjuntos/$vencido/paciente/archivo.txt" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: text/plain' \
@@ -120,6 +122,10 @@ curl -fsS "$api_url/auth/v1/admin/users/$vencido" -H "apikey: $service_key" -H "
 curl -fsS "$api_url/storage/v1/object/authenticated/adjuntos/$vencido/paciente/archivo.txt" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 
+# La primera ejecución solo reclama esta cuenta. Una reactivación durante la
+# ventana cancela el reclamo antes de cualquier borrado irreversible.
+actualizar_acceso "$reactivado_durante_reclamo" '{"estado":"activa"}'
+
 segunda=$(ejecutar)
 [ "$(jq -r '.eliminadas' <<<"$segunda")" = '1' ]
 [ "$(jq -r '.errores' <<<"$segunda")" = '0' ]
@@ -131,9 +137,13 @@ codigo_objeto=$(curl -sS -o /dev/null -w '%{http_code}' "$api_url/storage/v1/obj
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key")
 [ "$codigo_objeto" = '400' ] || [ "$codigo_objeto" = '404' ]
 
-for id in "$futuro" "$reactivado"; do
+for id in "$futuro" "$reactivado" "$reactivado_durante_reclamo"; do
   curl -fsS "$api_url/auth/v1/admin/users/$id" -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 done
+reclamo=$(curl -fsS "$api_url/rest/v1/accesos_comerciales?user_id=eq.$reactivado_durante_reclamo&select=eliminacion_reclamada_en,eliminacion_confirmada_en" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" | jq '.[0]')
+[ "$(jq -r '.eliminacion_reclamada_en' <<<"$reclamo")" = 'null' ]
+[ "$(jq -r '.eliminacion_confirmada_en' <<<"$reclamo")" = 'null' ]
 [ "$(tail -n 2 "$temporal/orden.log" | tr '\n' ' ')" = 'storage auth ' ]
 [ "$(cat "$temporal/copia-externa.txt")" = 'copia externa' ]
 

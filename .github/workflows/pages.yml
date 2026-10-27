@@ -3,7 +3,7 @@
 # Requisito (una vez): Settings → Pages → Build and deployment → Source: "GitHub Actions".
 # Opcional, para usar Supabase y Google Drive en la versión publicada, define en
 # Settings → Secrets and variables → Actions → Variables:
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_GOOGLE_CLIENT_ID, VITE_URL_CODIGO
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_GOOGLE_CLIENT_ID
 # (son valores públicos por diseño; la seguridad la da RLS en Supabase).
 # Sin ellas, la app publicada funciona en modo local (datos solo en el navegador).
 name: Publicar en GitHub Pages
@@ -40,7 +40,8 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
-          VITE_URL_CODIGO: ${{ vars.VITE_URL_CODIGO }}
+          # AGPL-3.0: enlaza el código exacto del commit que produce este build.
+          VITE_URL_CODIGO: https://github.com/${{ github.repository }}/tree/${{ github.sha }}
       # GitHub Pages no tiene reescrituras: 404.html = index.html para que las rutas internas
       # (ej. /pacientes/…) carguen la app al abrirlas directamente o al recargar.
       - run: cp dist/index.html dist/404.html

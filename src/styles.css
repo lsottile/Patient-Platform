@@ -1745,6 +1745,14 @@ input[type='radio'] {
   flex: none;
   margin-top: 0.2rem;
 }
+.casilla-legal--compacta {
+  display: inline-flex;
+  margin: 0.35rem 1rem 0 0;
+  font-size: 0.85rem;
+}
+.aviso-suscripcion__contenido {
+  flex: 1;
+}
 .suscripcion-acciones {
   margin-top: 1.5rem;
 }

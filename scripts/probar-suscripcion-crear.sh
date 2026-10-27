@@ -29,6 +29,26 @@ import os
 directorio = Path(os.environ['MP_TEST_DIR'])
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if not self.path.startswith('/preapproval/preapproval-test-'):
+            self.send_response(404)
+            self.end_headers()
+            return
+        identificador = self.path.removeprefix('/preapproval/')
+        estado = 'cancelled' if identificador == 'preapproval-test-1' and (directorio / 'status').exists() else 'pending'
+        respuesta = json.dumps({
+            'id': identificador,
+            'status': estado,
+            'external_reference': (directorio / 'user_id').read_text(),
+            'auto_recurring': {'transaction_amount': '50000.00', 'currency_id': 'ARS'},
+            'last_modified': '2026-10-27T00:00:00Z',
+        }).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(respuesta)))
+        self.end_headers()
+        self.wfile.write(respuesta)
+
     def do_POST(self):
         if self.path != '/preapproval':
             self.send_response(404)
@@ -40,9 +60,11 @@ class Handler(BaseHTTPRequestHandler):
         contador = directorio / 'count'
         cantidad = int(contador.read_text() if contador.exists() else '0') + 1
         contador.write_text(str(cantidad), encoding='utf-8')
+        with (directorio / 'idempotency.txt').open('a') as archivo:
+            archivo.write(self.headers.get('x-idempotency-key', '') + '\n')
         respuesta = json.dumps({
-            'id': 'preapproval-test',
-            'init_point': 'https://www.mercadopago.com.ar/subscriptions/test',
+            'id': f'preapproval-test-{cantidad}',
+            'init_point': f'https://www.mercadopago.com.ar/subscriptions/test-{cantidad}',
             'status': 'pending',
         }).encode()
         self.send_response(201)
@@ -91,6 +113,7 @@ usuario=$(curl -fsS -X POST "$api_url/auth/v1/admin/users" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
   -d '{"email":"checkout@example.com","password":"Prueba-segura-1234","email_confirm":true}')
 user_id=$(jq -r '.id' <<<"$usuario")
+printf '%s' "$user_id" >"$temporal/user_id"
 sesion=$(curl -fsS -X POST "$api_url/auth/v1/token?grant_type=password" \
   -H "apikey: $anon_key" -H 'Content-Type: application/json' \
   -d '{"email":"checkout@example.com","password":"Prueba-segura-1234"}')
@@ -109,9 +132,17 @@ crear() {
 
 primera=$(crear)
 segunda=$(crear)
-[ "$(jq -r '.initPoint' <<<"$primera")" = 'https://www.mercadopago.com.ar/subscriptions/test' ]
+[ "$(jq -r '.initPoint' <<<"$primera")" = 'https://www.mercadopago.com.ar/subscriptions/test-1' ]
 [ "$primera" = "$segunda" ]
 [ "$(cat "$temporal/count")" = '1' ]
+
+printf 'cancelled' >"$temporal/status"
+tercera=$(crear)
+cuarta=$(crear)
+[ "$(jq -r '.initPoint' <<<"$tercera")" = 'https://www.mercadopago.com.ar/subscriptions/test-2' ]
+[ "$tercera" = "$cuarta" ]
+[ "$(cat "$temporal/count")" = '2' ]
+[ "$(sort -u "$temporal/idempotency.txt" | wc -l | tr -d ' ')" = '2' ]
 
 jq -e --arg user "$user_id" '
   .reason == "Kine — suscripción mensual"
@@ -124,10 +155,11 @@ jq -e --arg user "$user_id" '
   and .status == "pending"
 ' "$temporal/payload.json" >/dev/null
 
-acceso=$(curl -fsS "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id&select=mercado_pago_preapproval_id,terminos_aceptados_version,privacidad_aceptada_version" \
+acceso=$(curl -fsS "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id&select=mercado_pago_preapproval_id,checkout_generacion,terminos_aceptados_version,privacidad_aceptada_version" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" | jq '.[0]')
 jq -e '
-  .mercado_pago_preapproval_id == "preapproval-test"
+  .mercado_pago_preapproval_id == "preapproval-test-2"
+  and .checkout_generacion == 1
   and .terminos_aceptados_version == "2026-10-26"
   and .privacidad_aceptada_version == "2026-10-26"
 ' <<<"$acceso" >/dev/null

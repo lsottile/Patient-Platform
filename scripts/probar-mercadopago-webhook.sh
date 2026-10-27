@@ -56,6 +56,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         ahora = datetime.now(timezone.utc)
+        base_eventos = datetime(2026, 10, 27, 1, 0, 0, tzinfo=timezone.utc)
         if self.path.startswith('/preapproval/'):
             identificador = unquote(self.path.removeprefix('/preapproval/'))
             if identificador != 'preapproval-test':
@@ -66,38 +67,44 @@ class Handler(BaseHTTPRequestHandler):
                 'id': identificador,
                 'status': estado,
                 'external_reference': referencia,
-                'auto_recurring': {'transaction_amount': 50000, 'currency_id': 'ARS'},
+                'auto_recurring': {'transaction_amount': '50000.00', 'currency_id': 'ARS'},
                 'next_payment_date': iso(ahora + timedelta(days=30)),
-                'last_modified': f'{estado}-v1',
+                'last_modified': iso(ahora),
             })
         if self.path.startswith('/authorized_payments/'):
             identificador = unquote(self.path.removeprefix('/authorized_payments/')).lower()
             estados = {
-                'invoice-approved': 'approved',
-                'invoice-rejected-1': 'rejected',
-                'invoice-rejected-2': 'rejected',
-                'invoice-refunded': 'refunded',
-                'invoice-old-refund': 'refunded',
-                'invoice-bad-amount': 'approved',
-                'invoice-bad-currency': 'approved',
+                '1000': 'rejected',
+                '1001': 'approved',
+                '1002': 'rejected',
+                '1003': 'rejected',
+                '1004': 'refunded',
+                '1005': 'refunded',
+                '1006': 'rejected',
+                '1007': 'approved',
+                '1008': 'approved',
             }
             if identificador not in estados:
                 return self.responder({'error': 'not found'}, 404)
-            monto = 1 if identificador == 'invoice-bad-amount' else 50000
-            moneda = 'USD' if identificador == 'invoice-bad-currency' else 'ARS'
-            payment_id = 'payment-invoice-approved' if identificador == 'invoice-refunded' else f'payment-{identificador}'
+            desplazamientos = {'1000': -600, '1001': 0, '1002': 60, '1003': 120, '1004': 300, '1005': 240, '1006': -300, '1007': 180, '1008': 180}
+            instante = base_eventos + timedelta(seconds=desplazamientos[identificador])
+            monto = '1.00' if identificador == '1007' else '50000.00'
+            moneda = 'USD' if identificador == '1008' else 'ARS'
+            payment_id = 9001 if identificador in {'1001', '1004'} else int(f'9{identificador}')
             return self.responder({
-                'id': identificador,
-                'status': 'processed',
+                'id': int(identificador),
+                'type': 'scheduled',
+                'status': 'scheduled',
                 'preapproval_id': 'preapproval-test',
-                'debit_date': iso(ahora),
-                'last_modified': identificador,
+                'external_reference': (directorio / 'user_id').read_text(),
+                'currency_id': moneda,
+                'transaction_amount': monto,
+                'debit_date': iso(instante),
+                'last_modified': iso(instante),
                 'payment': {
                     'id': payment_id,
                     'status': estados[identificador],
-                    'transaction_amount': monto,
-                    'currency_id': moneda,
-                    'date_approved': iso(ahora) if estados[identificador] == 'approved' else None,
+                    'status_detail': 'accredited' if estados[identificador] == 'approved' else estados[identificador],
                 },
             })
         self.responder({'error': 'not found'}, 404)
@@ -159,40 +166,52 @@ contar_eventos() {
 }
 
 ahora=$(date +%s)
-codigo=$(notificar subscription_authorized_payment invoice-approved req-invalida "$ahora" "$(printf '0%.0s' {1..64})")
+codigo=$(notificar subscription_authorized_payment 1001 req-invalida "$ahora" "$(printf '0%.0s' {1..64})")
 [ "$codigo" = '401' ] || { echo "firma inválida: se esperaba 401 y llegó $codigo" >&2; exit 1; }
 
 viejo=$((ahora - 301))
-codigo=$(notificar subscription_authorized_payment invoice-approved req-vieja "$viejo")
+codigo=$(notificar subscription_authorized_payment 1001 req-vieja "$viejo")
 [ "$codigo" = '401' ] || { echo "firma vencida: se esperaba 401 y llegó $codigo" >&2; exit 1; }
 
-codigo=$(notificar topic_desconocido invoice-approved req-topic "$ahora")
+codigo=$(notificar topic_desconocido 1001 req-topic "$ahora")
 [ "$codigo" = '400' ] || { echo "tópico inválido: se esperaba 400 y llegó $codigo" >&2; exit 1; }
 
-codigo=$(notificar subscription_authorized_payment INVOICE-APPROVED req-aprobada "$ahora")
+codigo=$(notificar subscription_authorized_payment 1000 req-primer-rechazo "$ahora")
+[ "$codigo" = '200' ]
+[ "$(leer_acceso | jq -r '.estado')" = 'pendiente' ]
+curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+  -d '{"eliminacion_reclamada_en":"2026-10-27T00:00:00Z"}' >/dev/null
+
+codigo=$(notificar subscription_authorized_payment 1001 req-aprobada "$ahora")
 [ "$codigo" = '200' ] || { cat "$temporal/respuesta.json" >&2; exit 1; }
 acceso=$(leer_acceso)
 [ "$(jq -r '.estado' <<<"$acceso")" = 'activa' ]
-[ "$(contar_eventos)" = '1' ]
+[ "$(jq -r '.eliminacion_reclamada_en' <<<"$acceso")" = 'null' ]
+[ "$(contar_eventos)" = '2' ]
 
-codigo=$(notificar subscription_authorized_payment INVOICE-APPROVED req-aprobada-duplicada "$ahora")
+codigo=$(notificar subscription_authorized_payment 1001 req-aprobada-duplicada "$ahora")
 [ "$codigo" = '200' ]
-[ "$(contar_eventos)" = '1' ]
+[ "$(contar_eventos)" = '2' ]
 
-codigo=$(notificar subscription_authorized_payment invoice-rejected-1 req-rechazo-1 "$ahora")
+codigo=$(notificar subscription_authorized_payment 1006 req-rechazo-viejo "$ahora")
+[ "$codigo" = '200' ]
+[ "$(leer_acceso | jq -r '.estado')" = 'activa' ]
+
+codigo=$(notificar subscription_authorized_payment 1002 req-rechazo-1 "$ahora")
 [ "$codigo" = '200' ]
 gracia=$(leer_acceso | jq -r '.gracia_hasta')
 [ "$(leer_acceso | jq -r '.estado')" = 'gracia' ]
 
-codigo=$(notificar subscription_authorized_payment invoice-rejected-2 req-rechazo-2 "$ahora")
+codigo=$(notificar subscription_authorized_payment 1003 req-rechazo-2 "$ahora")
 [ "$codigo" = '200' ]
 [ "$(leer_acceso | jq -r '.gracia_hasta')" = "$gracia" ]
 
 estado_antes=$(leer_acceso | jq -c '{estado,gracia_hasta}')
-codigo=$(notificar subscription_authorized_payment invoice-bad-amount req-monto "$ahora")
+codigo=$(notificar subscription_authorized_payment 1007 req-monto "$ahora")
 [ "$codigo" = '400' ]
 [ "$(leer_acceso | jq -c '{estado,gracia_hasta}')" = "$estado_antes" ]
-codigo=$(notificar subscription_authorized_payment invoice-bad-currency req-moneda "$ahora")
+codigo=$(notificar subscription_authorized_payment 1008 req-moneda "$ahora")
 [ "$codigo" = '400' ]
 [ "$(leer_acceso | jq -c '{estado,gracia_hasta}')" = "$estado_antes" ]
 
@@ -201,11 +220,11 @@ codigo=$(notificar subscription_preapproval preapproval-test req-cancelada "$aho
 [ "$codigo" = '200' ]
 [ "$(leer_acceso | jq -r '.estado')" = 'cancelada' ]
 
-codigo=$(notificar subscription_authorized_payment invoice-old-refund req-reintegro-viejo "$ahora")
+codigo=$(notificar subscription_authorized_payment 1005 req-reintegro-viejo "$ahora")
 [ "$codigo" = '200' ]
 [ "$(leer_acceso | jq -r '.estado')" = 'cancelada' ]
 
-codigo=$(notificar subscription_authorized_payment invoice-refunded req-reintegro "$ahora")
+codigo=$(notificar subscription_authorized_payment 1004 req-reintegro "$ahora")
 [ "$codigo" = '200' ]
 acceso=$(leer_acceso)
 [ "$(jq -r '.estado' <<<"$acceso")" = 'reintegrada' ]

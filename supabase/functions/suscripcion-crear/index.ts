@@ -1,4 +1,4 @@
-import { crearPreapproval } from '../_shared/mercadopago.ts';
+import { crearPreapproval, obtenerPreapproval } from '../_shared/mercadopago.ts';
 import {
   actualizarAccesoComercial,
   CORS,
@@ -37,16 +37,34 @@ Deno.serve(async (req) => {
     const acceso = await leerAccesoComercial(usuario.id);
     if (!acceso) return respuesta({ error: 'No existe el acceso comercial de la cuenta' }, 409);
     if (acceso.modalidad === 'exenta') return respuesta({ error: 'La cuenta está exenta de suscripción' }, 400);
+    if (acceso.eliminacion_confirmada_en) return respuesta({ error: 'La eliminación de la cuenta ya fue confirmada' }, 409);
 
     const versiones = await versionesLegalesVigentes();
     await actualizarAccesoComercial(usuario.id, {
       terminos_aceptados_version: versiones.terminos,
       privacidad_aceptada_version: versiones.privacidad,
       aceptado_en: new Date().toISOString(),
+      eliminacion_reclamada_en: null,
     });
 
+    let generacion = acceso.checkout_generacion;
     if (acceso.mercado_pago_preapproval_id && acceso.mercado_pago_init_point) {
-      return respuesta({ initPoint: acceso.mercado_pago_init_point });
+      const existente = await obtenerPreapproval(acceso.mercado_pago_preapproval_id);
+      const coincide =
+        existente.id === acceso.mercado_pago_preapproval_id &&
+        existente.external_reference === usuario.id &&
+        existente.auto_recurring.transaction_amount === acceso.precio_ars &&
+        existente.auto_recurring.currency_id === 'ARS';
+      if (!coincide) return respuesta({ error: 'La suscripción guardada no coincide con la cuenta' }, 409);
+      if (existente.status === 'pending' || existente.status === 'authorized') {
+        return respuesta({ initPoint: acceso.mercado_pago_init_point });
+      }
+      generacion += 1;
+      await actualizarAccesoComercial(usuario.id, {
+        checkout_generacion: generacion,
+        mercado_pago_preapproval_id: null,
+        mercado_pago_init_point: null,
+      });
     }
 
     const preapproval = await crearPreapproval({
@@ -54,6 +72,7 @@ Deno.serve(async (req) => {
       email: usuario.email,
       amount: acceso.precio_ars,
       backUrl: cuerpo.backUrl,
+      idempotencyKey: `${usuario.id}:${generacion}`,
     });
     await actualizarAccesoComercial(usuario.id, {
       mercado_pago_preapproval_id: preapproval.id,

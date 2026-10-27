@@ -33,12 +33,14 @@ Navegador (React)  ──►  Supabase
                          ├─ Postgres: tablas con RLS (cada usuario ve solo lo suyo)
                          ├─ Storage: bucket privado "adjuntos" (carpeta por usuario)
                          ├─ Vault: token de Google Drive cifrado
-                         ├─ Edge Functions: drive-conectar, drive-respaldo
-                         └─ pg_cron (cada hora) ──► drive-respaldo ──► Google Drive del usuario
+                          ├─ Edge Functions: respaldo, suscripciones, webhooks y limpieza
+                          ├─ Mercado Pago: cobro mensual y reintentos
+                          └─ pg_cron: respaldos y eliminación tras la retención
 ```
 
 - **Datos pensados para agentes:** cada registro es un documento JSON validado con el esquema de `src/domain/schema.ts`. Además hay columnas y vistas SQL (`v_pacientes`, `v_evolucion_eva`) para consultarlo. Detalle en [`AGENTS.md`](AGENTS.md).
 - **Respaldo en Drive:** corre en el servidor, así que funciona con la app cerrada. Usa el permiso `drive.file`: la app solo ve los archivos que ella misma crea, nunca el resto de tu Drive. Guarda un JSON completo por respaldo (conserva los últimos 30) más una copia de cada adjunto.
+- **Suscripción alojada:** cuando la app usa Supabase, Mercado Pago cobra la suscripción y RLS aplica el acceso. Una cuenta bloqueada conserva lectura únicamente para descargar el ZIP completo. El modo local no cobra ni usa este control comercial.
 - **Modo local:** sin configurar Supabase, la app guarda todo en el navegador (IndexedDB). Sirve para probarla. Los datos y adjuntos existen solo en ese navegador, así que la app:
   - pide al navegador **almacenamiento persistente**, para que no los borre por falta de espacio;
   - recuerda descargar un **respaldo completo (.zip)** si nunca se hizo o pasó más de una semana (salvo que esté activa la sincronización con una carpeta).
@@ -48,7 +50,7 @@ src/domain/       modelo (schema.ts), ficha estructurada, Markdown, anonimizaci�
 src/data/         repositorios local/Supabase (datos + archivos), autoguardado
 src/pages/        pantallas (incluye AdjuntosPage, ImprimirPage)
 supabase/migrations/   tablas, RLS, Storage, Vault, pg_cron
-supabase/functions/    Edge Functions del respaldo en Drive
+supabase/functions/    Edge Functions de respaldo, cobro, webhook y limpieza
 ```
 
 ---
@@ -72,7 +74,7 @@ npm run dev        # http://localhost:5173 → "Cargar pacientes de ejemplo"
 npx supabase login
 npx supabase link --project-ref <ref>
 npx supabase db push                                   # aplica supabase/migrations/
-npx supabase functions deploy drive-conectar drive-respaldo
+npx supabase functions deploy drive-conectar drive-respaldo suscripcion-crear mercadopago-webhook cuentas-limpiar
 ```
 
 **3. Google Cloud** ([console.cloud.google.com](https://console.cloud.google.com)). Basta un proyecto para el login y para Drive:
@@ -89,6 +91,9 @@ npx supabase functions deploy drive-conectar drive-respaldo
 ```bash
 GOOGLE_CLIENT_ID=<client id>
 GOOGLE_CLIENT_SECRET=<client secret>
+MP_ACCESS_TOKEN=<access token de Mercado Pago>
+MP_WEBHOOK_SECRET=<secreto de firma del webhook>
+KINE_APP_URL=https://<usuario>.github.io/<repositorio>/
 SECRETO_CRON=<cadena aleatoria larga, ej: openssl rand -hex 32>
 ```
 
@@ -109,23 +114,26 @@ pg_cron revisa cada hora a quién le toca respaldo (diario o semanal, según eli
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon key de Project Settings → API>
 VITE_GOOGLE_CLIENT_ID=<client id>
+VITE_URL_CODIGO=https://github.com/lsottile/Patient-Platform
 ```
 
-**8. Cerrar el registro.** Entra una vez para crear tu usuario y luego desactiva *Allow new users to sign up* en Supabase (*Authentication → Sign In / Providers*).
+Solo las variables `VITE_*` anteriores son públicas. Nunca pongas tokens de Mercado Pago, secretos de webhook, `SECRETO_CRON`, claves `service_role` ni secretos OAuth en `VITE_*`.
+
+**8. Configurar cobro y operación.** Seguí [`docs/operacion-suscripciones.md`](docs/operacion-suscripciones.md) para crear la aplicación de Mercado Pago, registrar ambos tópicos, asignar las cuentas exenta/preferencial y verificar el sandbox antes de cobrar.
 
 Por último, en la app ve a **Datos e IA → Conectar Google Drive**. Se hace el primer respaldo de inmediato.
 
 ### Publicar en GitHub Pages (gratis)
 
 El workflow `.github/workflows/pages.yml` corre los tests, compila y publica la app en
-**https://geno-whirl.github.io/Patient-Platform/** cada vez que se sube un cambio a la rama principal.
+**https://lsottile.github.io/Patient-Platform/** cada vez que se sube un cambio a la rama principal.
 
 1. Activa Pages una sola vez: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
 2. Para usar Supabase y Drive en la versión publicada, define en *Settings → Secrets and variables → Actions → **Variables***:
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_GOOGLE_CLIENT_ID`. Son valores públicos por diseño; la seguridad la da RLS. Sin ellas, la app publicada funciona en modo local.
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_CLIENT_ID` y `VITE_URL_CODIGO`. Son valores públicos por diseño; la seguridad la da RLS. Sin Supabase, la app publicada funciona en modo local.
 3. Agrega la URL publicada en los lugares donde se autoriza el regreso:
-   - Supabase → *Authentication → URL Configuration*: `https://geno-whirl.github.io/Patient-Platform/`
-   - Google Cloud → URI de redireccionamiento: `https://geno-whirl.github.io/Patient-Platform/datos`
+   - Supabase → *Authentication → URL Configuration*: `https://lsottile.github.io/Patient-Platform/`
+   - Google Cloud → URI de redireccionamiento: `https://lsottile.github.io/Patient-Platform/datos`
 4. Vuelve a ejecutar el workflow (*Actions → Publicar en GitHub Pages → Run workflow*) para que tome las variables.
 
 El repositorio es público, pero **solo el código** queda a la vista. Los datos de pacientes nunca van al repositorio: viven en Supabase (protegidos por RLS) o en el navegador (modo local).
@@ -158,6 +166,8 @@ Los correos de acceso llegan a Mailpit (http://127.0.0.1:54324). Para probar Dri
 ```bash
 npm test           # dominio: esquema, regiones, filtros, Markdown, anonimización
 npm run typecheck
+npm run build
+npx supabase db reset && npx supabase test db
 npm run schema     # regenera docs/esquema.json
 ```
 
@@ -182,12 +192,13 @@ No detecta nombres de **otras personas** escritos en texto libre (familiares, ot
 
 ## Privacidad
 
-Estos son **datos sensibles de salud** (en Chile, Ley 20.584 y Ley 19.628). La plataforma:
+Estos son **datos sensibles de salud**. Para el servicio alojado en Argentina se aplican, entre otras, la Ley 25.326 de protección de datos personales y la Ley 26.529 de derechos del paciente. La plataforma:
 - aísla los datos y archivos de cada usuario en la base de datos (Row Level Security; verificado con dos usuarios);
 - guarda el permiso de Google Drive cifrado (Vault), sin que el navegador pueda leerlo, y lo revoca al desconectar;
 - respalda solo en tu propio Drive.
+- mantiene la copia alojada durante un año desde el fin del acceso y luego la elimina; las copias descargadas o guardadas en Drive quedan bajo control de la persona usuaria.
 
-Recomendado: activar la verificación en dos pasos en Google y en Supabase, y no compartir fichas sin anonimizar.
+La Ley 26.529 puede exigir al profesional conservar la historia clínica por al menos diez años desde la última actuación. Descargá y custodiá el respaldo antes de la eliminación alojada. Recomendado: activar la verificación en dos pasos en Google y en Supabase, y no compartir fichas sin anonimizar. Ver los documentos públicos en `/terminos` y `/privacidad`.
 
 ## Respaldos manuales
 
@@ -227,8 +238,8 @@ LEEME.txt
 - **Datos de pacientes.** El repositorio contiene solo código. Los datos clínicos viven en tu proyecto de Supabase o en
   tu navegador (modo local), nunca en GitHub.
 - **Responsabilidad de quien la usa.** Quien instala la plataforma y registra pacientes es responsable del tratamiento de
-  esos datos según la normativa aplicable (en Chile, Ley 20.584 sobre derechos y deberes de los pacientes y Ley 19.628
-  sobre protección de la vida privada): consentimiento, confidencialidad, acceso y resguardo.
+  esos datos según la normativa aplicable (en Argentina, entre otras, Ley 25.326 y Ley 26.529): autorización,
+  confidencialidad, acceso, resguardo y conservación de la historia clínica.
 - **IA.** Las fichas exportadas para un LLM son anonimizadas por defecto, pero la anonimización automática no es perfecta.
   Revisa antes de compartir. Las respuestas de un LLM pueden ser incorrectas y no reemplazan el juicio clínico.
 - **Sin garantía.** El software se entrega "tal cual", sin garantía de ningún tipo (ver secciones 15 y 16 de la licencia).
@@ -249,4 +260,3 @@ En la práctica:
   "Código fuente" en el pie de página: apúntalo a tu repositorio con la variable `VITE_URL_CODIGO`.
 - Las dependencias (React, Supabase, Zod, fflate, idb-keyval…) mantienen sus propias licencias (MIT y Apache-2.0),
   compatibles con la AGPL-3.0.
-

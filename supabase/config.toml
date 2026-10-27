@@ -433,3 +433,6 @@ verify_jwt = true
 
 [functions.mercadopago-webhook]
 verify_jwt = false
+
+[functions.cuentas-limpiar]
+verify_jwt = false

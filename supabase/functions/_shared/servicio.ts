@@ -3,6 +3,7 @@
 
 export const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const CLAVE_SERVICIO = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const API_ADMIN = Deno.env.get('KINE_ADMIN_API_URL') ?? SUPABASE_URL;
 
 const cabeceras = (extra: Record<string, string> = {}) => ({
   apikey: CLAVE_SERVICIO,
@@ -78,6 +79,29 @@ export async function actualizarAccesoComercial(userId: string, cambios: Record<
     body: JSON.stringify(cambios),
   });
   await verificar(r, 'actualizar acceso comercial');
+}
+
+export async function listarObjetosAdjuntos(userId: string): Promise<string[]> {
+  return await rpc<string[]>('objetos_adjuntos_usuario', { p_user: userId });
+}
+
+export async function borrarObjetosAdjuntos(rutas: string[]): Promise<void> {
+  for (let desde = 0; desde < rutas.length; desde += 100) {
+    const r = await fetch(`${API_ADMIN}/storage/v1/object/adjuntos`, {
+      method: 'DELETE',
+      headers: cabeceras({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ prefixes: rutas.slice(desde, desde + 100) }),
+    });
+    await verificar(r, 'borrar adjuntos de la cuenta');
+  }
+}
+
+export async function borrarUsuario(userId: string): Promise<void> {
+  const r = await fetch(`${API_ADMIN}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: cabeceras(),
+  });
+  await verificar(r, 'borrar usuario');
 }
 
 export async function versionesLegalesVigentes(): Promise<{ terminos: string; privacidad: string }> {

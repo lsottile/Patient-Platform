@@ -1,121 +1,104 @@
-# Operar suscripciones y retención
+# Operar el cobro mensual manual
 
-Este runbook lleva el sistema desde un entorno de prueba hasta producción y permite verificar cobros, acceso, exportación y eliminación sin editar migraciones ya aplicadas.
+Kine no procesa dinero. El cobro se acuerda por fuera de la aplicación y la operación registra en Supabase qué usuario pagó cada mes. El estado calculado en hora argentina gobierna tanto la interfaz como las escrituras protegidas por RLS.
 
-> **Antes de vender:** los textos legales son un borrador operativo. Obtené revisión jurídica y contable argentina antes de ampliar el piloto. Kine no emite comprobantes de ARCA.
+> **Antes de cobrar:** obtené revisión jurídica y contable argentina. Kine no emite comprobantes de ARCA y el cobro externo no elimina obligaciones fiscales.
 
-## 1. Preparar Mercado Pago
+## Camino rápido: registrar un pago
 
-1. Creá una aplicación en Mercado Pago para la cuenta que recibirá los cobros.
-2. Separá las credenciales de prueba de las productivas. Nunca uses una cuenta compradora que sea la misma cuenta vendedora.
-3. Copiá el Access Token del entorno elegido y generá el secreto de webhook.
-4. Registrá esta URL pública:
+1. Confirmá por un canal externo que el pago fue recibido.
+2. En **Supabase → SQL Editor**, reemplazá únicamente el correo y el período del siguiente bloque.
+3. Ejecutá todo el bloque junto y comprobá que la consulta final devuelva una sola cuenta y el período esperado.
 
-   ```text
-   https://<ref>.supabase.co/functions/v1/mercadopago-webhook
-   ```
+```sql
+begin;
 
-5. Habilitá los tópicos `subscription_preapproval` y `subscription_authorized_payment`.
-6. Usá la simulación del panel para cada tópico y confirmá una respuesta HTTP 200. Una firma inválida debe responder 401 y un tópico desconocido, 400.
+do $$
+declare
+  v_user_ids uuid[];
+begin
+  select array_agg(id order by id)
+    into v_user_ids
+  from auth.users
+  where lower(email) = lower('profesional@example.com');
 
-El webhook nunca confía en el cuerpo recibido: vuelve a consultar el recurso en Mercado Pago y valida cuenta, monto y moneda.
+  if coalesce(cardinality(v_user_ids), 0) <> 1 then
+    raise exception 'se esperaba exactamente una cuenta para el correo indicado';
+  end if;
 
-## 2. Configurar Supabase
+  perform public.registrar_pago_manual(v_user_ids[1], date '2026-11-01');
+end $$;
 
-### Secretos de Edge Functions
+select u.email, p.periodo, p.registrado_en
+from public.pagos_manuales p
+join auth.users u on u.id = p.user_id
+where lower(u.email) = lower('profesional@example.com')
+  and p.periodo = date '2026-11-01';
 
-Copiá `supabase/functions/.env.example` a `supabase/functions/.env` y completá:
+commit;
+```
+
+El período siempre es el **primer día del mes argentino** (`AAAA-MM-01`), aunque el pago se reciba más tarde. Repetir el mismo correo y período es seguro: la operación es idempotente. No insertes un pago antes de confirmarlo.
+
+## Calendario de acceso
+
+| Situación del mes corriente | Estado |
+|---|---|
+| Pago registrado | Acceso normal, sin aviso |
+| Días 1–3 sin pago | Aviso verde |
+| Días 4–6 sin pago | Aviso amarillo |
+| Días 7–10 sin pago | Aviso rojo |
+| Desde el día 11 sin pago | Bloqueo de interfaz y escrituras RLS |
+
+Un pago tardío del mes corriente restaura el acceso inmediatamente. El bloqueo conserva respaldo completo, documentos legales y salida. La falta de pago no elimina datos automáticamente.
+
+## Asignaciones comerciales
+
+La migración aplica estas referencias administrativas:
+
+| Cuenta | Modalidad | Referencia |
+|---|---|---:|
+| `lucianodaux@gmail.com` | Exenta | ARS 0 |
+| `santiagomelian11@gmail.com` | Preferencial | ARS 15.000 |
+| Otras cuentas actuales y nuevas | General | ARS 50.000 |
+
+Los importes no se muestran en la interfaz ni se procesan dentro de Kine.
+
+Para verificar una asignación sin leer datos clínicos:
+
+```sql
+select u.email, a.modalidad, a.precio_ars,
+       public.estado_cobro_manual(
+         a.modalidad,
+         (select max(p.periodo) from public.pagos_manuales p where p.user_id = a.user_id),
+         public.fecha_comercial_argentina()
+       ) as estado_cobro
+from auth.users u
+join public.accesos_comerciales a on a.user_id = u.id
+where lower(u.email) = lower('profesional@example.com');
+```
+
+## Configuración y despliegue
+
+`suscripcion-crear` conserva el código histórico de Mercado Pago, pero responde `503` salvo que el secreto `COBROS_HABILITADOS` sea exactamente `true`. En la operación manual debe permanecer ausente o en `false`.
 
 ```dotenv
-MP_ACCESS_TOKEN=<access token de prueba o producción>
-MP_WEBHOOK_SECRET=<secreto de firma del webhook>
+COBROS_HABILITADOS=false
 KINE_APP_URL=https://<usuario>.github.io/<repositorio>/
-SECRETO_CRON=<cadena aleatoria larga>
-GOOGLE_CLIENT_ID=<client id, si se usa Drive>
-GOOGLE_CLIENT_SECRET=<client secret, si se usa Drive>
 ```
 
-`KINE_APP_URL` debe ser la raíz pública exacta, incluida la subruta de GitHub Pages y la barra final. Subí los secretos:
-
-```bash
-npx supabase secrets set --env-file supabase/functions/.env
-```
-
-No pongas `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `SECRETO_CRON` ni el secreto de Google en variables `VITE_*`: todo valor `VITE_*` queda público en el JavaScript del navegador.
-
-### Migraciones, Vault y funciones
+Aplicá cambios y desplegá la función:
 
 ```bash
 npx supabase login
 npx supabase link --project-ref <ref>
 npx supabase db push
-npx supabase functions deploy drive-conectar drive-respaldo suscripcion-crear mercadopago-webhook cuentas-limpiar
+npx supabase functions deploy suscripcion-crear
 ```
 
-Guardá en Vault la URL del proyecto y el mismo secreto del cron:
+No pongas tokens, secretos ni claves de servicio en variables `VITE_*`: todo valor `VITE_*` queda público en el JavaScript del navegador.
 
-```sql
-select vault.create_secret('https://<ref>.supabase.co', 'url_proyecto');
-select vault.create_secret('<mismo valor que SECRETO_CRON>', 'secreto_cron');
-```
-
-Las migraciones programan `respaldo-drive` cada hora y `limpieza-cuentas` una vez al día. Verificalas sin exponer secretos:
-
-```sql
-select jobname, schedule, active
-from cron.job
-where jobname in ('respaldo-drive', 'limpieza-cuentas');
-```
-
-## 3. Asignar las cuentas iniciales
-
-Buscá cada UUID en **Supabase → Authentication → Users**. No lo obtengas de un dato enviado por el navegador.
-
-Cuenta propietaria exenta:
-
-```sql
-update public.accesos_comerciales
-set modalidad = 'exenta',
-    precio_ars = 0,
-    estado = 'activa',
-    gracia_hasta = null,
-    acceso_hasta = null,
-    eliminar_despues_de = null
-where user_id = '<UUID_ADMIN>'::uuid;
-```
-
-Cuenta existente con precio preferencial y acceso de transición:
-
-```sql
-update public.accesos_comerciales
-set modalidad = 'preferencial',
-    precio_ars = 15000,
-    estado = 'transicion',
-    gracia_hasta = null,
-    acceso_hasta = null,
-    eliminar_despues_de = null
-where user_id = '<UUID_CLIENTE_PREFERENCIAL>'::uuid;
-```
-
-Comprobá que cada sentencia modificó exactamente una fila. Las cuentas nuevas nacen `pendiente`, con ARS 50.000 y sin acceso clínico antes del primer pago.
-
-## 4. Publicar GitHub Pages
-
-En **Settings → Secrets and variables → Actions → Variables** configurá solo valores públicos:
-
-```text
-VITE_SUPABASE_URL=https://<ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon key>
-VITE_GOOGLE_CLIENT_ID=<client id público, si se usa Drive>
-```
-
-El workflow fija `VITE_URL_CODIGO` automáticamente en `https://github.com/<repositorio>/tree/<commit>`, de modo que el enlace publique el código exacto desplegado bajo AGPL-3.0. Luego ejecutá **Publicar en GitHub Pages**.
-
-Abrí sin sesión `/terminos` y `/privacidad`. En login, documentos, aplicación y bloqueo, verificá que **Código fuente** apunte al fork correcto.
-
-## 5. Verificación previa al lanzamiento
-
-### Contratos locales automatizados
+## Verificación antes de publicar
 
 Con Docker activo:
 
@@ -130,94 +113,26 @@ bash scripts/probar-mercadopago-webhook.sh
 bash scripts/probar-cuentas-limpiar.sh
 ```
 
-Los scripts usan servicios falsos locales: prueban identidad y precio controlados por el servidor, firma, repetición, transiciones, orden de borrado y reintentos. No sustituyen una compra real en el sandbox de Mercado Pago.
+Checklist manual:
 
-### Recorrido con cuentas de prueba de Mercado Pago
+- [ ] Una cuenta al día no muestra aviso.
+- [ ] Los días 1–10 muestran solo `Pago mensual pendiente`, sin monto ni medio de pago.
+- [ ] Desde el día 11, la cuenta impaga no puede escribir pero sí exportar y salir.
+- [ ] Registrar el mes corriente desbloquea sin crear una fila duplicada.
+- [ ] La cuenta exenta nunca se bloquea.
+- [ ] `suscripcion-crear` responde `503` y no contacta Mercado Pago.
 
-Registrá evidencia de cada punto antes de activar credenciales productivas:
+## Datos históricos de Mercado Pago
 
-- [ ] **Alta nueva:** muestra ARS 50.000, exige aceptar ambos documentos y no monta la navegación clínica.
-- [ ] **Checkout repetido:** dos clics o recargas reutilizan la misma preapproval.
-- [ ] **Pago aprobado:** el webhook deja `estado = 'activa'`; recién entonces RLS permite escribir.
-- [ ] **Retorno manipulado:** `?status=approved` o un identificador falso en la URL no cambia el acceso.
-- [ ] **Webhook repetido:** responde 200, conserva una sola clave de evento y no extiende dos veces el acceso.
-- [ ] **Cobro rechazado:** deja `estado = 'gracia'` y fija cuatro días corridos desde el primer rechazo; un segundo rechazo no reinicia el plazo.
-- [ ] **Fin de gracia:** exactamente en `gracia_hasta`, RLS niega escrituras y la pantalla conserva pago, ZIP, legales y salida.
-- [ ] **Cancelación:** conserva acceso hasta `acceso_hasta`, sin cobrar otro período.
-- [ ] **Reintegro:** solo el último pago reintegrado bloquea de inmediato y fija la eliminación a un año.
-- [ ] **Reactivación:** un pago nuevo limpia gracia y eliminación, y restaura el acceso sin intervención manual.
-- [ ] **Exportación bloqueada:** el ZIP incluye `respaldo.json`, todos los adjuntos y `LEEME.txt`.
-- [ ] **Cuenta exenta:** no muestra cobro y nunca se bloquea.
-- [ ] **Cuenta preferencial:** muestra ARS 15.000 y conserva acceso durante la transición.
+Las tablas, webhook y código anteriores se conservan para auditoría y conciliación de eventos históricos. No borres migraciones ya aplicadas. El webhook puede seguir validando notificaciones pendientes, pero el frontend no ofrece checkout y el kill switch impide crear nuevas preapprovals por defecto.
 
-Consultas de apoyo, sin leer datos clínicos:
+## Incidentes y rollback
 
-```sql
-select modalidad, precio_ars, estado, acceso_hasta, gracia_hasta, eliminar_despues_de
-from public.accesos_comerciales
-where user_id = '<UUID_DE_PRUEBA>'::uuid;
+No edites ni borres migraciones aplicadas y no hagas un downgrade destructivo.
 
-select topic, resource_id, accion, intentos, procesado_en, ultimo_error
-from public.eventos_mercado_pago
-order by recibido_en desc
-limit 20;
-```
+1. Mantené `COBROS_HABILITADOS=false`.
+2. Si el cálculo mensual falla, desactivá temporalmente nuevas altas en Supabase Auth.
+3. Conservá la base y los pagos registrados; corregí mediante una migración nueva.
+4. Ejecutá toda la verificación local antes de volver a desplegar.
 
-## 6. Reintegros y soporte
-
-- Respondé soporte dentro de tres días hábiles.
-- Si se solicita dentro de cinco días hábiles del cobro, reintegrá el último pago completo desde Mercado Pago.
-- No cambies el estado manualmente para simular un reintegro: esperá el webhook firmado y verificá `reintegrada`.
-- Si el webhook no llega, reenviá la notificación desde Mercado Pago. La idempotencia permite repetirla.
-
-## 7. Eliminación anticipada y automática
-
-La solicitud anticipada llega a `lucianodsottile@gmail.com`. Verificá identidad, recomendá descargar el ZIP y fijá la fecha de limpieza:
-
-```sql
-update public.accesos_comerciales
-set eliminar_despues_de = now(),
-    eliminacion_reclamada_en = now() - interval '10 minutes'
-where user_id = '<UUID_SOLICITANTE>'::uuid
-  and not public.puede_escribir(user_id);
-```
-
-Ejecutá la función sin esperar al cron:
-
-```bash
-curl --fail --request POST \
-  'https://<ref>.supabase.co/functions/v1/cuentas-limpiar' \
-  --header 'x-secreto-cron: <SECRETO_CRON>' \
-  --header 'Content-Type: application/json' \
-  --data '{}'
-```
-
-La limpieza automática reclama primero la cuenta y espera al menos diez minutos antes de confirmar el borrado; una reactivación durante esa ventana cancela el reclamo. En la solicitud anticipada, la sentencia anterior deja cumplida esa espera porque identidad y voluntad ya fueron verificadas manualmente. La respuesta solo informa `revisadas`, `eliminadas` y `errores`. Storage se elimina antes que Auth. Un fallo conserva el usuario para reintentar en la próxima ejecución. Kine no puede borrar ZIP descargados, carpetas sincronizadas ni archivos del Drive controlado por la persona usuaria.
-
-## 8. Monitoreo y recuperación
-
-- Revisá logs de `mercadopago-webhook` y `cuentas-limpiar`; no copies payloads clínicos a tickets.
-- Alertá sobre respuestas 401/500 sostenidas, eventos con `ultimo_error` y ejecuciones de limpieza con `errores > 0`.
-- Conciliá periódicamente preapprovals/pagos de Mercado Pago con `accesos_comerciales`.
-
-### Rollback operativo
-
-No edites ni borres migraciones aplicadas y no hagas downgrade destructivo de la base.
-
-1. Desactivá temporalmente nuevas altas en Supabase Auth.
-2. Si el cobro debe detenerse, pausá nuevas suscripciones en Mercado Pago; mantené el webhook activo para recibir estados pendientes.
-3. Conservá acceso a clientes existentes mientras se corrige el incidente:
-
-   ```sql
-   update public.accesos_comerciales
-   set estado = 'transicion',
-       gracia_hasta = null,
-       eliminar_despues_de = null
-   where modalidad <> 'exenta'
-     and public.puede_escribir(user_id);
-   ```
-
-4. Volvé a desplegar la versión anterior de frontend o Edge Functions, pero dejá las tablas y políticas nuevas.
-5. Corregí, ejecutá los scripts de contrato y conciliá los eventos antes de reabrir altas.
-
-La sentencia de transición está deliberadamente limitada a cuentas que ya tenían acceso; no habilita cuentas pendientes sin pago.
+Nunca simules un pago insertando datos clínicos ni consultes historias para resolver un incidente comercial.

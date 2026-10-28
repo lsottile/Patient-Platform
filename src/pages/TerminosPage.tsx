@@ -48,24 +48,22 @@ export function TerminosPage() {
         <section>
           <h2>4. Precio, renovación y falta de pago</h2>
           <p>
-            El precio aplicable se muestra antes de contratar. La suscripción se cobra por adelantado cada mes en pesos
-            argentinos mediante Mercado Pago y se renueva automáticamente hasta su cancelación. Mercado Pago puede
-            reintentar cobros rechazados conforme a sus propias reglas.
+            El precio aplicable se acuerda y paga por fuera de Kine. Kine no procesa pagos, no recibe dinero ni renueva
+            cobros automáticamente. Una vez recibido el pago, el operador registra manualmente en Kine el mes abonado.
           </p>
           <p>
-            Ante una renovación rechazada, Kine mantiene el acceso completo durante cuatro días corridos desde el primer
-            rechazo. Vencido ese plazo, la cuenta queda temporalmente bloqueada hasta que se confirme un pago. Durante el
-            bloqueo se puede regularizar el pago, descargar un respaldo completo y cerrar sesión.
+            Si el mes corriente no está registrado, Kine muestra un aviso de pago mensual pendiente durante los días 1 al
+            10. Desde el día 11 la cuenta queda temporalmente bloqueada hasta que se registre el pago de ese mes. Durante el
+            bloqueo se puede descargar un respaldo completo, consultar los documentos legales y cerrar sesión.
           </p>
         </section>
 
         <section>
           <h2>5. Cancelación, reintegros y soporte</h2>
           <p>
-            La cancelación voluntaria evita renovaciones futuras y conserva el acceso hasta terminar el período ya pagado.
-            El reintegro total del último cobro puede solicitarse dentro de los <strong>cinco días hábiles</strong>{' '}
-            posteriores al pago escribiendo al correo de soporte. Cuando Mercado Pago confirma el reintegro, el acceso
-            pagado termina.
+            La baja del servicio y el reintegro total del último pago pueden solicitarse dentro de los{' '}
+            <strong>cinco días hábiles</strong> posteriores al pago escribiendo al correo de soporte. Las condiciones del
+            reintegro se coordinan por el mismo medio externo utilizado para pagar.
           </p>
           <p>Las consultas de soporte reciben respuesta dentro de tres días hábiles.</p>
         </section>
@@ -82,10 +80,9 @@ export function TerminosPage() {
         <section>
           <h2>7. Exportación, conservación y eliminación</h2>
           <p>
-            La cuenta puede descargar un respaldo completo con sus datos y adjuntos, incluso si está bloqueada. Kine
-            conserva su copia durante <strong>un año</strong> desde el fin del acceso y luego puede eliminarla
-            automáticamente sin un aviso por correo adicional. La eliminación anticipada puede solicitarse por correo y
-            se atenderá cuando las obligaciones legales lo permitan.
+            La cuenta puede descargar un respaldo completo con sus datos y adjuntos, incluso si está bloqueada. La falta de
+            pago no provoca la eliminación automática de datos. La eliminación puede solicitarse por correo y se atenderá
+            cuando la identidad y las obligaciones legales aplicables hayan sido verificadas.
           </p>
           <div className="aviso aviso--aviso">
             <strong>Conservación profesional:</strong> la Ley 26.529 exige conservar la historia clínica durante al menos{' '}

@@ -183,7 +183,7 @@ codigo=$(notificar topic_desconocido 1001 req-topic "$ahora")
 
 codigo=$(notificar subscription_authorized_payment 1000 req-primer-rechazo "$ahora")
 [ "$codigo" = '200' ]
-[ "$(leer_acceso | jq -r '.estado')" = 'pendiente' ]
+[ "$(leer_acceso | jq -r '.estado')" = 'activa' ]
 curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
   -d '{"eliminacion_reclamada_en":"2026-10-27T00:00:00Z"}' >/dev/null

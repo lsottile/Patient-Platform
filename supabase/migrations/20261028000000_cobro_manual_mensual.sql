@@ -1,6 +1,11 @@
 -- Cobro mensual registrado por operación. La hora comercial es Argentina y
 -- la decisión servidor gobierna tanto la interfaz como las políticas RLS.
 
+update public.documentos_legales set vigente = false where vigente;
+insert into public.documentos_legales (tipo, version, vigente_desde) values
+  ('terminos', '2026-10-28', '2026-10-28T00:00:00Z'),
+  ('privacidad', '2026-10-28', '2026-10-28T00:00:00Z');
+
 create table public.pagos_manuales (
   user_id uuid not null references auth.users (id) on delete cascade,
   periodo date not null check (periodo = date_trunc('month', periodo)::date),

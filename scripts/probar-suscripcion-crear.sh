@@ -88,26 +88,42 @@ MP_API_URL=http://host.docker.internal:54329
 KINE_APP_URL=$api_url/
 EOF
 
-npx supabase functions serve suscripcion-crear --env-file "$temporal/funciones.env" >"$temporal/funciones.log" 2>&1 &
-pid_funciones=$!
-
 endpoint="$api_url/functions/v1/suscripcion-crear"
-disponible=false
-for _ in $(seq 1 40); do
-  codigo=$(curl -sS -o "$temporal/sin-auth.json" -w '%{http_code}' -X POST "$endpoint" \
-    -H "apikey: $anon_key" -H 'Content-Type: application/json' -d '{}' || true)
-  if [ "$codigo" != '000' ] && [ "$codigo" != '404' ] && [ "$codigo" != '503' ]; then
-    disponible=true
-    break
+
+iniciar_funcion() {
+  local cobros=${1:-false}
+  if [ -n "$pid_funciones" ]; then
+    kill "$pid_funciones" 2>/dev/null || true
+    wait "$pid_funciones" 2>/dev/null || true
+    pid_funciones=''
   fi
-  sleep 0.25
-done
-if [ "$disponible" != true ]; then
-  cat "$temporal/funciones.log" >&2
-  echo 'La función suscripcion-crear no quedó disponible' >&2
-  exit 1
-fi
-[ "$codigo" = '401' ] || { echo "Se esperaba 401 sin JWT, se recibió $codigo" >&2; exit 1; }
+  cat >"$temporal/funciones.env" <<EOF
+MP_ACCESS_TOKEN=test-token
+MP_API_URL=http://host.docker.internal:54329
+KINE_APP_URL=$api_url/
+EOF
+  if [ "$cobros" = true ]; then echo 'COBROS_HABILITADOS=true' >>"$temporal/funciones.env"; fi
+  npx supabase functions serve suscripcion-crear --env-file "$temporal/funciones.env" >"$temporal/funciones.log" 2>&1 &
+  pid_funciones=$!
+
+  local disponible=false codigo_arranque
+  for _ in $(seq 1 60); do
+    codigo_arranque=$(curl -sS -o "$temporal/sin-auth.json" -w '%{http_code}' -X POST "$endpoint" \
+      -H "apikey: $anon_key" -H 'Content-Type: application/json' -d '{}' || true)
+    if [ "$codigo_arranque" = '401' ]; then
+      disponible=true
+      break
+    fi
+    sleep 0.25
+  done
+  if [ "$disponible" != true ]; then
+    cat "$temporal/funciones.log" >&2
+    echo 'La función suscripcion-crear no quedó disponible' >&2
+    exit 1
+  fi
+}
+
+iniciar_funcion false
 
 usuario=$(curl -fsS -X POST "$api_url/auth/v1/admin/users" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
@@ -118,6 +134,14 @@ sesion=$(curl -fsS -X POST "$api_url/auth/v1/token?grant_type=password" \
   -H "apikey: $anon_key" -H 'Content-Type: application/json' \
   -d '{"email":"checkout@example.com","password":"Prueba-segura-1234"}')
 jwt=$(jq -r '.access_token' <<<"$sesion")
+
+codigo=$(curl -sS -o "$temporal/deshabilitada.json" -w '%{http_code}' -X POST "$endpoint" \
+  -H "apikey: $anon_key" -H "Authorization: Bearer $jwt" -H 'Content-Type: application/json' \
+  -d "{\"aceptaTerminos\":true,\"aceptaPrivacidad\":true,\"backUrl\":\"$api_url/\"}")
+[ "$codigo" = '503' ] || { echo "Se esperaba 503 con cobros deshabilitados, se recibió $codigo" >&2; exit 1; }
+[ ! -e "$temporal/count" ] || { echo 'Mercado Pago fue contactado con cobros deshabilitados' >&2; exit 1; }
+
+iniciar_funcion true
 
 codigo=$(curl -sS -o "$temporal/sin-aceptar.json" -w '%{http_code}' -X POST "$endpoint" \
   -H "apikey: $anon_key" -H "Authorization: Bearer $jwt" -H 'Content-Type: application/json' \
@@ -160,8 +184,8 @@ acceso=$(curl -fsS "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id&sel
 jq -e '
   .mercado_pago_preapproval_id == "preapproval-test-2"
   and .checkout_generacion == 1
-  and .terminos_aceptados_version == "2026-10-26"
-  and .privacidad_aceptada_version == "2026-10-26"
+  and .terminos_aceptados_version == "2026-10-28"
+  and .privacidad_aceptada_version == "2026-10-28"
 ' <<<"$acceso" >/dev/null
 
 curl -fsS -X PATCH "$api_url/rest/v1/accesos_comerciales?user_id=eq.$user_id" \

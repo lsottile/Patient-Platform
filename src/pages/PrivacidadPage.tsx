@@ -34,19 +34,20 @@ export function PrivacidadPage() {
           <h2>2. Datos tratados</h2>
           <ul>
             <li>cuenta y autenticación: correo, identificadores y datos básicos del proveedor de acceso;</li>
-            <li>suscripción: modalidad, precio, estado, fechas e identificadores de Mercado Pago;</li>
+            <li>pagos manuales: modalidad, referencia administrativa, período abonado, estado y fecha de registro;</li>
+            <li>identificadores históricos de Mercado Pago generados antes del cambio al registro manual;</li>
             <li>soporte y seguridad: mensajes, diagnósticos técnicos y registros mínimos de eventos;</li>
             <li>contenido profesional y clínico: pacientes, evaluaciones, sesiones, centros, ejercicios y adjuntos;</li>
             <li>respaldo opcional: configuración y tokens protegidos necesarios para Google Drive.</li>
           </ul>
-          <p>Kine no recibe ni almacena los datos completos de las tarjetas utilizadas para pagar.</p>
+          <p>Kine no procesa pagos ni recibe o almacena datos de tarjetas.</p>
         </section>
 
         <section>
           <h2>3. Finalidades</h2>
           <p>
-            Los datos se usan para autenticar, prestar y proteger el servicio; guardar y exportar información; procesar y
-            conciliar suscripciones; responder soporte; realizar respaldos solicitados; prevenir abuso y cumplir obligaciones
+            Los datos se usan para autenticar, prestar y proteger el servicio; guardar y exportar información; registrar y
+            conciliar pagos manuales; responder soporte; realizar respaldos solicitados; prevenir abuso y cumplir obligaciones
             legales. Kine no vende datos personales ni clínicos.
           </p>
         </section>
@@ -72,7 +73,7 @@ export function PrivacidadPage() {
                 </tr>
                 <tr>
                   <td>Mercado Pago</td>
-                  <td>Alta, cobro, renovación, cancelación y reintegro de suscripciones.</td>
+                  <td>Conservación y conciliación de identificadores históricos; Kine no inicia cobros nuevos.</td>
                 </tr>
                 <tr>
                   <td>Google</td>
@@ -91,7 +92,7 @@ export function PrivacidadPage() {
           <h2>5. Transferencias internacionales</h2>
           <p>
             La infraestructura de Supabase utilizada por Kine está alojada en <strong>São Paulo, Brasil</strong>. GitHub,
-            Google y Mercado Pago también pueden procesar información fuera de Argentina según su infraestructura. Al usar
+            Google y, para los registros históricos, Mercado Pago también pueden procesar información fuera de Argentina según su infraestructura. Al usar
             el servicio se informa esta transferencia internacional; Kine procurará utilizar consentimiento y mecanismos
             contractuales adecuados cuando correspondan. Antes de cargar datos sensibles, el profesional debe verificar que
             su tratamiento y las transferencias cumplen las exigencias aplicables.

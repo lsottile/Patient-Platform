@@ -28,6 +28,9 @@ Deno.serve(async (req) => {
 
   const usuario = await usuarioDeLaPeticion(req);
   if (!usuario?.email) return respuesta({ error: 'No autenticado' }, 401);
+  if (Deno.env.get('COBROS_HABILITADOS') !== 'true') {
+    return respuesta({ error: 'Los cobros están deshabilitados; informa el pago mensual por soporte.' }, 503);
+  }
 
   try {
     const cuerpo = await req.json();

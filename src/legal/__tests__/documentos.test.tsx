@@ -9,10 +9,10 @@ import { VERSION_PRIVACIDAD, VERSION_TERMINOS } from '../versiones';
 const render = (contenido: React.ReactNode) => renderToStaticMarkup(<MemoryRouter>{contenido}</MemoryRouter>);
 
 describe('documentos legales públicos', () => {
-  it('publica términos versionados con identidad, cobro, soporte y conservación clínica', () => {
+  it('publica términos versionados con cobro manual, soporte y conservación clínica', () => {
     const html = render(<TerminosPage />);
 
-    expect(VERSION_TERMINOS).toBe('2026-10-26');
+    expect(VERSION_TERMINOS).toBe('2026-10-28');
     expect(html).toContain('Luciano Sottile');
     expect(html).toContain('20-41197971-8');
     expect(html).toContain('Corrientes 886');
@@ -21,8 +21,12 @@ describe('documentos legales públicos', () => {
     expect(html).toContain('lucianodsottile@gmail.com');
     expect(html).toMatch(/tres días hábiles/i);
     expect(html).toMatch(/cinco días hábiles/i);
+    expect(html).toMatch(/pago.*por fuera de Kine/i);
+    expect(html).toMatch(/días 1 al 10/i);
+    expect(html).toMatch(/día 11/i);
+    expect(html).toMatch(/Kine no procesa pagos/i);
     expect(html).toMatch(/14 días corridos/i);
-    expect(html).toMatch(/un año/i);
+    expect(html).toMatch(/falta de pago no provoca la eliminación automática/i);
     expect(html).toMatch(/diez años/i);
     expect(html).toContain('Ley 26.529');
   });
@@ -30,11 +34,13 @@ describe('documentos legales públicos', () => {
   it('publica una política versionada con proveedores, transferencia y derechos argentinos', () => {
     const html = render(<PrivacidadPage />);
 
-    expect(VERSION_PRIVACIDAD).toBe('2026-10-26');
+    expect(VERSION_PRIVACIDAD).toBe('2026-10-28');
     expect(html).toContain('Ley 25.326');
     expect(html).toContain('GitHub Pages');
     expect(html).toContain('Supabase');
     expect(html).toContain('Mercado Pago');
+    expect(html).toMatch(/identificadores históricos de Mercado Pago/i);
+    expect(html).toMatch(/pagos manuales/i);
     expect(html).toContain('Google');
     expect(html).toContain('São Paulo');
     expect(html).toContain('Agencia de Acceso a la Información Pública');

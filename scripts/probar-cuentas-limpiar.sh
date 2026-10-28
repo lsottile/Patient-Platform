@@ -19,6 +19,13 @@ estado_local=$(npx supabase status -o json)
 api_url=$(jq -r '.API_URL' <<<"$estado_local")
 anon_key=$(jq -r '.ANON_KEY' <<<"$estado_local")
 service_key=$(jq -r '.SERVICE_ROLE_KEY' <<<"$estado_local")
+db_url=$(jq -r '.DB_URL' <<<"$estado_local")
+
+# Prueba la frontera posterior al día 10 sin depender del reloj del sistema.
+psql "$db_url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+create or replace function public.fecha_comercial_argentina() returns date
+language sql stable set search_path = '' as $$ select date '2026-11-11' $$;
+SQL
 
 crear_usuario() {
   local email=$1
@@ -41,6 +48,13 @@ actualizar_acceso "$vencido" '{"estado":"reintegrada","eliminar_despues_de":"202
 actualizar_acceso "$futuro" '{"estado":"reintegrada","eliminar_despues_de":"2099-01-01T00:00:00Z"}'
 actualizar_acceso "$reactivado" '{"estado":"activa","eliminar_despues_de":"2020-01-01T00:00:00Z"}'
 actualizar_acceso "$reactivado_durante_reclamo" '{"estado":"reintegrada","eliminar_despues_de":"2020-01-01T00:00:00Z"}'
+
+registrar_pago() {
+  curl -fsS -X POST "$api_url/rest/v1/rpc/registrar_pago_manual" \
+    -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: application/json' \
+    -d "{\"p_user\":\"$1\",\"p_periodo\":\"2026-11-01\"}" >/dev/null
+}
+registrar_pago "$reactivado"
 
 curl -fsS -X POST "$api_url/storage/v1/object/adjuntos/$vencido/paciente/archivo.txt" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" -H 'Content-Type: text/plain' \
@@ -124,7 +138,7 @@ curl -fsS "$api_url/storage/v1/object/authenticated/adjuntos/$vencido/paciente/a
 
 # La primera ejecución solo reclama esta cuenta. Una reactivación durante la
 # ventana cancela el reclamo antes de cualquier borrado irreversible.
-actualizar_acceso "$reactivado_durante_reclamo" '{"estado":"activa"}'
+registrar_pago "$reactivado_durante_reclamo"
 
 segunda=$(ejecutar)
 [ "$(jq -r '.eliminadas' <<<"$segunda")" = '1' ]

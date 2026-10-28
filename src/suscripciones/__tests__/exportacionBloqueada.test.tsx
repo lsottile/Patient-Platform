@@ -51,7 +51,7 @@ describe('salida de datos para cuentas bloqueadas', () => {
     expect(html).not.toContain('JSON Schema');
   });
 
-  it('el bloqueo muestra eliminación, sensibilidad, custodia legal y las únicas acciones permitidas', () => {
+  it('el bloqueo ignora marcas históricas de eliminación y conserva las únicas acciones permitidas', () => {
     const html = render(
       <PantallaBloqueo
         acceso={acceso}
@@ -61,7 +61,8 @@ describe('salida de datos para cuentas bloqueadas', () => {
       />,
     );
 
-    expect(html).toContain('1 de noviembre de 2027, 00:00');
+    expect(html).not.toMatch(/eliminará automáticamente/i);
+    expect(html).not.toContain('1 de noviembre de 2027');
     expect(html).toMatch(/datos clínicos sensibles/i);
     expect(html).toMatch(/diez años/i);
     expect(html).toContain('lucianodsottile@gmail.com');

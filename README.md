@@ -32,15 +32,15 @@ Navegador (React)  ──►  Supabase
                          ├─ Auth: login con Google o enlace por correo
                          ├─ Postgres: tablas con RLS (cada usuario ve solo lo suyo)
                          ├─ Storage: bucket privado "adjuntos" (carpeta por usuario)
-                         ├─ Vault: token de Google Drive cifrado
-                          ├─ Edge Functions: respaldo, suscripciones, webhooks y limpieza
-                          ├─ Mercado Pago: cobro mensual y reintentos
-                          └─ pg_cron: respaldos y eliminación tras la retención
+                          ├─ Vault: token de Google Drive cifrado
+                          ├─ Edge Functions: respaldo y checkout histórico cerrado
+                          ├─ pagos_manuales: meses abonados por cuenta
+                          └─ pg_cron: respaldos de Drive
 ```
 
 - **Datos pensados para agentes:** cada registro es un documento JSON validado con el esquema de `src/domain/schema.ts`. Además hay columnas y vistas SQL (`v_pacientes`, `v_evolucion_eva`) para consultarlo. Detalle en [`AGENTS.md`](AGENTS.md).
 - **Respaldo en Drive:** corre en el servidor, así que funciona con la app cerrada. Usa el permiso `drive.file`: la app solo ve los archivos que ella misma crea, nunca el resto de tu Drive. Guarda un JSON completo por respaldo (conserva los últimos 30) más una copia de cada adjunto.
-- **Suscripción alojada:** cuando la app usa Supabase, Mercado Pago cobra la suscripción y RLS aplica el acceso. Una cuenta bloqueada conserva lectura únicamente para descargar el ZIP completo. El modo local no cobra ni usa este control comercial.
+- **Cobro mensual alojado:** el pago se acuerda por fuera de Kine y la operación registra el mes abonado en Supabase. RLS bloquea escrituras desde el día 11 si falta el período corriente; la cuenta conserva lectura para descargar el ZIP completo. El modo local no usa este control comercial.
 - **Modo local:** sin configurar Supabase, la app guarda todo en el navegador (IndexedDB). Sirve para probarla. Los datos y adjuntos existen solo en ese navegador, así que la app:
   - pide al navegador **almacenamiento persistente**, para que no los borre por falta de espacio;
   - recuerda descargar un **respaldo completo (.zip)** si nunca se hizo o pasó más de una semana (salvo que esté activa la sincronización con una carpeta).
@@ -50,7 +50,7 @@ src/domain/       modelo (schema.ts), ficha estructurada, Markdown, anonimizaci�
 src/data/         repositorios local/Supabase (datos + archivos), autoguardado
 src/pages/        pantallas (incluye AdjuntosPage, ImprimirPage)
 supabase/migrations/   tablas, RLS, Storage, Vault, pg_cron
-supabase/functions/    Edge Functions de respaldo, cobro, webhook y limpieza
+supabase/functions/    Edge Functions de respaldo e integraciones históricas
 ```
 
 ---
@@ -74,7 +74,7 @@ npm run dev        # http://localhost:5173 → "Cargar pacientes de ejemplo"
 npx supabase login
 npx supabase link --project-ref <ref>
 npx supabase db push                                   # aplica supabase/migrations/
-npx supabase functions deploy drive-conectar drive-respaldo suscripcion-crear mercadopago-webhook cuentas-limpiar
+npx supabase functions deploy drive-conectar drive-respaldo suscripcion-crear
 ```
 
 **3. Google Cloud** ([console.cloud.google.com](https://console.cloud.google.com)). Basta un proyecto para el login y para Drive:
@@ -91,8 +91,7 @@ npx supabase functions deploy drive-conectar drive-respaldo suscripcion-crear me
 ```bash
 GOOGLE_CLIENT_ID=<client id>
 GOOGLE_CLIENT_SECRET=<client secret>
-MP_ACCESS_TOKEN=<access token de Mercado Pago>
-MP_WEBHOOK_SECRET=<secreto de firma del webhook>
+COBROS_HABILITADOS=false
 KINE_APP_URL=https://<usuario>.github.io/<repositorio>/
 SECRETO_CRON=<cadena aleatoria larga, ej: openssl rand -hex 32>
 ```
@@ -117,9 +116,9 @@ VITE_GOOGLE_CLIENT_ID=<client id>
 VITE_URL_CODIGO=https://github.com/lsottile/Patient-Platform
 ```
 
-Solo las variables `VITE_*` anteriores son públicas. Nunca pongas tokens de Mercado Pago, secretos de webhook, `SECRETO_CRON`, claves `service_role` ni secretos OAuth en `VITE_*`.
+Solo las variables `VITE_*` anteriores son públicas. Nunca pongas `SECRETO_CRON`, claves `service_role` ni secretos OAuth en `VITE_*`. Las credenciales históricas de Mercado Pago tampoco deben exponerse si todavía se conservan para conciliación.
 
-**8. Configurar cobro y operación.** Seguí [`docs/operacion-suscripciones.md`](docs/operacion-suscripciones.md) para crear la aplicación de Mercado Pago, registrar ambos tópicos, asignar las cuentas exenta/preferencial y verificar el sandbox antes de cobrar.
+**8. Configurar cobro y operación.** Seguí [`docs/operacion-suscripciones.md`](docs/operacion-suscripciones.md) para registrar por correo cada mes abonado, verificar las cuentas exenta/preferencial y mantener el checkout histórico cerrado.
 
 Por último, en la app ve a **Datos e IA → Conectar Google Drive**. Se hace el primer respaldo de inmediato.
 

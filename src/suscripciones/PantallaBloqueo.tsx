@@ -2,11 +2,9 @@ import { PieLegal } from '../components/PieLegal';
 import { SeccionRespaldo } from '../components/SeccionRespaldo';
 import { DatosProvider } from '../data/DatosContext';
 import type { Repositorio } from '../data/repositorio';
-import { fechaArgentina } from './AvisoSuscripcion';
 import type { AccesoComercial } from './tipos';
 
 export function PantallaBloqueo({
-  acceso,
   repositorio,
   email,
   onSalir,
@@ -37,13 +35,6 @@ export function PantallaBloqueo({
             <strong>Este respaldo contiene datos clínicos sensibles.</strong> La Ley 26.529 exige conservar la historia clínica
             durante al menos diez años desde la última actuación. Descargá la copia y custodiala de forma segura.
           </div>
-          {acceso.eliminarDespuesDe && (
-            <p>
-              La copia alojada en Kine se eliminará automáticamente el <strong>{fechaArgentina(acceso.eliminarDespuesDe)}</strong>.
-              Para solicitar eliminación anticipada, escribí a{' '}
-              <a href="mailto:lucianodsottile@gmail.com">lucianodsottile@gmail.com</a>.
-            </p>
-          )}
           <SeccionRespaldo soloExportar />
         </main>
         <PieLegal />

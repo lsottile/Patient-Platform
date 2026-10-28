@@ -22,7 +22,19 @@ export function demoraHastaRevision(proximaRevisionEn: string | null, ahora = ne
   if (!proximaRevisionEn) return null;
   const instante = Date.parse(proximaRevisionEn);
   if (!Number.isFinite(instante)) return null;
-  return Math.min(Math.max(instante - ahora.getTime(), 0), LIMITE_TIMEOUT_MS);
+  return Math.max(instante - ahora.getTime(), 0);
+}
+
+export function tramoHastaRevision(
+  proximaRevisionEn: string | null,
+  ahora = new Date(),
+): { demora: number; revisar: boolean } | null {
+  const restante = demoraHastaRevision(proximaRevisionEn, ahora);
+  if (restante === null) return null;
+  return {
+    demora: Math.min(restante, LIMITE_TIMEOUT_MS),
+    revisar: restante <= LIMITE_TIMEOUT_MS,
+  };
 }
 
 export function AccesoComercialGate({
@@ -62,10 +74,19 @@ export function AccesoComercialGate({
   }, [recargar]);
 
   useEffect(() => {
-    const demora = demoraHastaRevision(acceso?.proximaRevisionEn ?? null);
-    if (demora === null) return;
-    const temporizador = window.setTimeout(() => void recargar(), demora);
-    return () => window.clearTimeout(temporizador);
+    let temporizador: number | undefined;
+    const programar = () => {
+      const tramo = tramoHastaRevision(acceso?.proximaRevisionEn ?? null);
+      if (!tramo) return;
+      temporizador = window.setTimeout(() => {
+        if (tramo.revisar) void recargar();
+        else programar();
+      }, tramo.demora);
+    };
+    programar();
+    return () => {
+      if (temporizador !== undefined) window.clearTimeout(temporizador);
+    };
   }, [acceso?.proximaRevisionEn, recargar]);
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { RepositorioLocal } from '../../data/repositorioLocal';
-import { demoraHastaRevision } from '../AccesoComercial';
+import { demoraHastaRevision, tramoHastaRevision } from '../AccesoComercial';
 import { AvisoPagoManual } from '../AvisoPagoManual';
 import { PantallaBloqueo } from '../PantallaBloqueo';
 import type { AccesoComercial, EstadoCobroManual } from '../tipos';
@@ -29,6 +29,15 @@ describe('presentación del cobro manual', () => {
   it('programa la revisión exactamente en el instante informado por el servidor', () => {
     expect(demoraHastaRevision('2026-11-11T03:00:00.000Z', new Date('2026-11-11T02:59:59.000Z'))).toBe(1_000);
     expect(demoraHastaRevision(null, new Date('2026-11-11T02:59:59.000Z'))).toBeNull();
+  });
+
+  it('divide una espera mayor al límite del navegador y luego llega al instante exacto', () => {
+    const destino = '2026-12-01T03:00:00.000Z';
+    const primerTramo = tramoHastaRevision(destino, new Date('2026-11-01T03:00:00.000Z'));
+    expect(primerTramo).toEqual({ demora: 2_147_483_647, revisar: false });
+
+    const ultimoTramo = tramoHastaRevision(destino, new Date('2026-11-28T03:00:00.000Z'));
+    expect(ultimoTramo).toEqual({ demora: 3 * 24 * 60 * 60 * 1_000, revisar: true });
   });
   it.each([
     ['aviso_verde', 'aviso--ok'],

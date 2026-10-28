@@ -17,6 +17,7 @@ const acceso = (estadoCobroManual: EstadoCobroManual): AccesoComercial => ({
   estadoCobroManual,
   periodoCobroActual: '2026-11-01',
   ultimoPeriodoPagado: estadoCobroManual === 'al_dia' ? '2026-11-01' : null,
+  proximaRevisionEn: estadoCobroManual === 'exenta' ? null : '2026-12-01T03:00:00.000Z',
 });
 
 describe('estado comercial efectivo', () => {

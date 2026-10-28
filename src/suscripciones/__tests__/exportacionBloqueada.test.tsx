@@ -32,6 +32,7 @@ const acceso: AccesoComercial = {
   estadoCobroManual: 'bloqueada',
   periodoCobroActual: '2026-11-01',
   ultimoPeriodoPagado: null,
+  proximaRevisionEn: '2026-12-01T03:00:00.000Z',
 };
 
 const render = (contenido: React.ReactNode) => renderToStaticMarkup(<MemoryRouter>{contenido}</MemoryRouter>);

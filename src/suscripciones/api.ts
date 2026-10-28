@@ -14,6 +14,7 @@ interface FilaAcceso {
   estado_cobro_manual: unknown;
   periodo_cobro_actual: unknown;
   ultimo_periodo_pagado: unknown;
+  proxima_revision_en: unknown;
 }
 
 const MODALIDADES = new Set<ModalidadComercial>(['general', 'preferencial', 'exenta']);
@@ -42,6 +43,7 @@ function convertir(fila: FilaAcceso): AccesoComercial {
     estadoCobroManual: fila.estado_cobro_manual as EstadoCobroManual,
     periodoCobroActual: fila.periodo_cobro_actual,
     ultimoPeriodoPagado: textoONull(fila.ultimo_periodo_pagado),
+    proximaRevisionEn: textoONull(fila.proxima_revision_en),
   };
 }
 

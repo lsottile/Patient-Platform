@@ -131,34 +131,32 @@ ejecutar() {
 
 primera=$(ejecutar)
 [ "$(jq -r '.eliminadas' <<<"$primera")" = '0' ]
-[ "$(jq -r '.errores' <<<"$primera")" = '1' ]
+[ "$(jq -r '.errores' <<<"$primera")" = '0' ]
 curl -fsS "$api_url/auth/v1/admin/users/$vencido" -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 curl -fsS "$api_url/storage/v1/object/authenticated/adjuntos/$vencido/paciente/archivo.txt" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 
-# La primera ejecución solo reclama esta cuenta. Una reactivación durante la
-# ventana cancela el reclamo antes de cualquier borrado irreversible.
+# Incluso con marcas históricas, registrar el mes corriente no compite con
+# ninguna eliminación: la selección automática permanece vacía.
 registrar_pago "$reactivado_durante_reclamo"
 
 segunda=$(ejecutar)
-[ "$(jq -r '.eliminadas' <<<"$segunda")" = '1' ]
+[ "$(jq -r '.eliminadas' <<<"$segunda")" = '0' ]
 [ "$(jq -r '.errores' <<<"$segunda")" = '0' ]
 
-codigo_usuario=$(curl -sS -o /dev/null -w '%{http_code}' "$api_url/auth/v1/admin/users/$vencido" \
-  -H "apikey: $service_key" -H "Authorization: Bearer $service_key")
-[ "$codigo_usuario" = '404' ]
-codigo_objeto=$(curl -sS -o /dev/null -w '%{http_code}' "$api_url/storage/v1/object/authenticated/adjuntos/$vencido/paciente/archivo.txt" \
-  -H "apikey: $service_key" -H "Authorization: Bearer $service_key")
-[ "$codigo_objeto" = '400' ] || [ "$codigo_objeto" = '404' ]
+curl -fsS "$api_url/auth/v1/admin/users/$vencido" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
+curl -fsS "$api_url/storage/v1/object/authenticated/adjuntos/$vencido/paciente/archivo.txt" \
+  -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 
-for id in "$futuro" "$reactivado" "$reactivado_durante_reclamo"; do
+for id in "$vencido" "$futuro" "$reactivado" "$reactivado_durante_reclamo"; do
   curl -fsS "$api_url/auth/v1/admin/users/$id" -H "apikey: $service_key" -H "Authorization: Bearer $service_key" >/dev/null
 done
 reclamo=$(curl -fsS "$api_url/rest/v1/accesos_comerciales?user_id=eq.$reactivado_durante_reclamo&select=eliminacion_reclamada_en,eliminacion_confirmada_en" \
   -H "apikey: $service_key" -H "Authorization: Bearer $service_key" | jq '.[0]')
 [ "$(jq -r '.eliminacion_reclamada_en' <<<"$reclamo")" = 'null' ]
 [ "$(jq -r '.eliminacion_confirmada_en' <<<"$reclamo")" = 'null' ]
-[ "$(tail -n 2 "$temporal/orden.log" | tr '\n' ' ')" = 'storage auth ' ]
+[ ! -e "$temporal/orden.log" ]
 [ "$(cat "$temporal/copia-externa.txt")" = 'copia externa' ]
 
-echo 'cuentas-limpiar: orden, reintento y selección OK'
+echo 'cuentas-limpiar: eliminación automática neutralizada OK'

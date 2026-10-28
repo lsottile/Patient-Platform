@@ -41,6 +41,7 @@ describe('documentos legales públicos', () => {
     expect(html).toContain('Mercado Pago');
     expect(html).toMatch(/identificadores históricos de Mercado Pago/i);
     expect(html).toMatch(/pagos manuales/i);
+    expect(html).toMatch(/falta de pago no programa.*eliminación/i);
     expect(html).toContain('Google');
     expect(html).toContain('São Paulo');
     expect(html).toContain('Agencia de Acceso a la Información Pública');

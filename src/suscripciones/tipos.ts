@@ -20,4 +20,5 @@ export interface AccesoComercial {
   estadoCobroManual: EstadoCobroManual;
   periodoCobroActual: string;
   ultimoPeriodoPagado: string | null;
+  proximaRevisionEn: string | null;
 }

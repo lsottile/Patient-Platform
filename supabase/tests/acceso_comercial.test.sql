@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(42);
+select plan(50);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000001', 'pendiente@example.com'),
@@ -12,12 +12,24 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000006', 'cancelada-vigente@example.com'),
   ('00000000-0000-0000-0000-000000000007', 'cancelada-vencida@example.com'),
   ('00000000-0000-0000-0000-000000000008', 'exenta@example.com'),
-  ('00000000-0000-0000-0000-000000000009', 'otra@example.com');
+  ('00000000-0000-0000-0000-000000000009', 'otra@example.com'),
+  ('00000000-0000-0000-0000-000000000010', 'lucianodaux@gmail.com'),
+  ('00000000-0000-0000-0000-000000000011', 'santiagomelian11@gmail.com');
 
 select is(
   (select modalidad || ':' || precio_ars::text || ':' || estado from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000001'),
   'general:50000:activa',
   'una cuenta nueva nace activa con la referencia general'
+);
+select is(
+  (select modalidad || ':' || precio_ars::text from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000010'),
+  'exenta:0',
+  'la cuenta propietaria creada después de la migración nace exenta'
+);
+select is(
+  (select modalidad || ':' || precio_ars::text from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000011'),
+  'preferencial:15000',
+  'Santiago creado después de la migración conserva la referencia preferencial'
 );
 
 select is(public.estado_cobro_manual('general', null, date '2026-10-31'), 'al_dia', 'antes del inicio no hay deuda');
@@ -31,6 +43,10 @@ select is(public.estado_cobro_manual('general', null, date '2026-11-07'), 'aviso
 select is(public.estado_cobro_manual('general', null, date '2026-11-10'), 'aviso_rojo', 'el día 10 todavía conserva acceso');
 select is(public.estado_cobro_manual('general', null, date '2026-11-11'), 'bloqueada', 'el bloqueo comienza el día 11');
 select is(public.estado_cobro_manual('general', date '2026-11-01', date '2026-12-01'), 'aviso_verde', 'el pago anterior no se arrastra al mes nuevo');
+select is(public.estado_cobro_manual('general', date '2026-12-01', date '2026-11-15'), 'bloqueada', 'un pago futuro no habilita el mes corriente');
+
+create or replace function public.fecha_comercial_argentina() returns date
+language sql stable set search_path = '' as $$ select date '2026-11-11' $$;
 
 select ok(
   not has_function_privilege('authenticated', 'public.registrar_pago_manual(uuid,date)', 'execute'),
@@ -46,6 +62,18 @@ select throws_ok(
   'el período debe ser el primer día del mes',
   'un período inválido se rechaza'
 );
+select throws_ok(
+  $$select public.registrar_pago_manual('00000000-0000-0000-0000-000000000009', date '2026-10-01')$$,
+  '22023',
+  'el período debe comenzar desde noviembre de 2026',
+  'un período anterior al inicio se rechaza'
+);
+select throws_ok(
+  $$select public.registrar_pago_manual('00000000-0000-0000-0000-000000000009', date '2026-12-01')$$,
+  '22023',
+  'no se pueden registrar períodos futuros',
+  'un período futuro se rechaza'
+);
 select public.registrar_pago_manual('00000000-0000-0000-0000-000000000009', date '2026-11-01');
 select public.registrar_pago_manual('00000000-0000-0000-0000-000000000009', date '2026-11-01');
 select is(
@@ -57,9 +85,6 @@ select is(
 update public.accesos_comerciales set modalidad = 'exenta', precio_ars = 0, estado = 'activa'
 where user_id = '00000000-0000-0000-0000-000000000008';
 
-create or replace function public.fecha_comercial_argentina() returns date
-language sql stable set search_path = '' as $$ select date '2026-11-11' $$;
-
 insert into public.centros (id, user_id, data) values
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '{"nombre":"Propio"}'),
   ('10000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-000000000009', '{"nombre":"Ajeno"}');
@@ -67,6 +92,8 @@ insert into public.centros (id, user_id, data) values
 insert into storage.objects (bucket_id, name) values
   ('adjuntos', '00000000-0000-0000-0000-000000000001/paciente/propio.pdf'),
   ('adjuntos', '00000000-0000-0000-0000-000000000009/paciente/ajeno.pdf');
+insert into public.respaldos_drive (user_id, frecuencia)
+values ('00000000-0000-0000-0000-000000000001', 'diaria');
 
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
@@ -112,6 +139,10 @@ select throws_ok(
   'una cuenta impaga no puede subir adjuntos desde el día 11'
 );
 select is_empty(
+  $$update public.respaldos_drive set frecuencia = 'semanal' where user_id = auth.uid() returning user_id$$,
+  'una cuenta impaga no puede cambiar la frecuencia de Drive'
+);
+select is_empty(
   $$update public.accesos_comerciales set estado = 'activa' where user_id = auth.uid() returning user_id$$,
   'el titular no puede modificar su estado comercial'
 );
@@ -119,6 +150,11 @@ select results_eq(
   $$select estado_efectivo from public.mi_acceso_comercial()$$,
   array['bloqueada'::text],
   'el titular consulta el bloqueo manual calculado por el servidor'
+);
+select is(
+  (select proxima_revision_en from public.mi_acceso_comercial()),
+  timestamptz '2026-12-01 03:00:00+00',
+  'el servidor informa el próximo cambio de calendario argentino'
 );
 select is(
   public.puede_escribir('00000000-0000-0000-0000-000000000003'),
@@ -152,6 +188,13 @@ select is(
   'las nueve colecciones aplican el acceso comercial'
 );
 select ok(
+  exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'accesos_comerciales'
+  ),
+  'los pagos manuales pueden notificar el desbloqueo por Realtime'
+);
+select ok(
   not has_function_privilege('authenticated', 'public.registrar_evento_mercado_pago(text,text,text)', 'execute'),
   'authenticated no puede registrar eventos comerciales'
 );
@@ -182,24 +225,24 @@ select is(
   'el rollback no deja un evento marcado antes de aplicar el acceso'
 );
 update public.accesos_comerciales
-set estado = 'reintegrada', eliminar_despues_de = now() - interval '1 day'
-where user_id = '00000000-0000-0000-0000-000000000001';
+set estado = 'reintegrada',
+    eliminar_despues_de = now() - interval '1 day',
+    eliminacion_reclamada_en = now() - interval '20 minutes',
+    eliminacion_confirmada_en = now()
+where user_id = '00000000-0000-0000-0000-000000000002';
 select is(
   (select count(*) from public.cuentas_vencidas_para_eliminar()),
   0::bigint,
-  'la primera fase solo reclama una cuenta y todavía no la entrega para borrar'
-);
-update public.accesos_comerciales set estado = 'activa'
-where user_id = '00000000-0000-0000-0000-000000000001';
-select is(
-  (select count(*) from public.cuentas_vencidas_para_eliminar()),
-  0::bigint,
-  'la cuenta reactivada no se entrega a la limpieza'
+  'la limpieza automática queda neutralizada aunque existan marcas históricas'
 );
 select is(
-  (select eliminacion_reclamada_en from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000001'),
-  null::timestamptz,
-  'una reactivación cancela el reclamo de eliminación antes de borrar'
+  (select eliminacion_confirmada_en is not null from public.accesos_comerciales where user_id = '00000000-0000-0000-0000-000000000002'),
+  true,
+  'la función neutral no reescribe marcas históricas'
+);
+select ok(
+  not exists (select 1 from cron.job where jobname = 'limpieza-cuentas'),
+  'el cron de eliminación automática queda desprogramado'
 );
 update public.accesos_comerciales
 set eliminacion_reclamada_en = now() - interval '20 minutes', eliminacion_confirmada_en = now()

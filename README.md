@@ -196,9 +196,9 @@ Estos son **datos sensibles de salud**. Para el servicio alojado en Argentina se
 - aísla los datos y archivos de cada usuario en la base de datos (Row Level Security; verificado con dos usuarios);
 - guarda el permiso de Google Drive cifrado (Vault), sin que el navegador pueda leerlo, y lo revoca al desconectar;
 - respalda solo en tu propio Drive.
-- mantiene la copia alojada durante un año desde el fin del acceso y luego la elimina; las copias descargadas o guardadas en Drive quedan bajo control de la persona usuaria.
+- no elimina automáticamente la copia alojada por falta de pago; las copias descargadas o guardadas en Drive quedan bajo control de la persona usuaria.
 
-La Ley 26.529 puede exigir al profesional conservar la historia clínica por al menos diez años desde la última actuación. Descargá y custodiá el respaldo antes de la eliminación alojada. Recomendado: activar la verificación en dos pasos en Google y en Supabase, y no compartir fichas sin anonimizar. Ver los documentos públicos en `/terminos` y `/privacidad`.
+La Ley 26.529 puede exigir al profesional conservar la historia clínica por al menos diez años desde la última actuación. Descargá y custodiá respaldos periódicos. Recomendado: activar la verificación en dos pasos en Google y en Supabase, y no compartir fichas sin anonimizar. Ver los documentos públicos en `/terminos` y `/privacidad`.
 
 ## Respaldos manuales
 

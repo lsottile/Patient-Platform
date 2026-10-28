@@ -111,9 +111,9 @@ export function PrivacidadPage() {
         <section>
           <h2>7. Conservación y eliminación</h2>
           <p>
-            Mientras la cuenta tiene acceso, la información se conserva para prestar el servicio. Después de terminar el
-            acceso, Kine conserva su copia por un año para permitir la exportación o reactivación y luego la elimina
-            automáticamente. Puede solicitarse eliminación anticipada por correo, sujeta a obligaciones legales.
+            La información se conserva para prestar el servicio y permitir su exportación. La falta de pago no programa la
+            eliminación de la cuenta ni de sus datos. Puede solicitarse la eliminación por correo; antes de ejecutarla se
+            verifican la identidad y las obligaciones legales aplicables.
           </p>
           <p>
             Kine no controla ni elimina copias descargadas, carpetas sincronizadas o respaldos guardados en el Google Drive

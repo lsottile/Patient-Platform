@@ -16,6 +16,15 @@ export interface ContextoBloqueo {
   onSalir: () => void;
 }
 
+const LIMITE_TIMEOUT_MS = 2_147_483_647;
+
+export function demoraHastaRevision(proximaRevisionEn: string | null, ahora = new Date()): number | null {
+  if (!proximaRevisionEn) return null;
+  const instante = Date.parse(proximaRevisionEn);
+  if (!Number.isFinite(instante)) return null;
+  return Math.min(Math.max(instante - ahora.getTime(), 0), LIMITE_TIMEOUT_MS);
+}
+
 export function AccesoComercialGate({
   sb,
   onSalir,
@@ -51,6 +60,21 @@ export function AccesoComercialGate({
     const intervalo = window.setInterval(() => void recargar(), 60_000);
     return () => window.clearInterval(intervalo);
   }, [recargar]);
+
+  useEffect(() => {
+    const demora = demoraHastaRevision(acceso?.proximaRevisionEn ?? null);
+    if (demora === null) return;
+    const temporizador = window.setTimeout(() => void recargar(), demora);
+    return () => window.clearTimeout(temporizador);
+  }, [acceso?.proximaRevisionEn, recargar]);
+
+  useEffect(() => {
+    const canal = sb
+      .channel('acceso-comercial-propio')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'accesos_comerciales' }, () => void recargar())
+      .subscribe();
+    return () => { void sb.removeChannel(canal); };
+  }, [sb, recargar]);
 
   const aviso = useMemo(
     () => acceso && <AvisoPagoManual estado={acceso.estadoCobroManual} />,

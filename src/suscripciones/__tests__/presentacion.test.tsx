@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { RepositorioLocal } from '../../data/repositorioLocal';
+import { demoraHastaRevision } from '../AccesoComercial';
 import { AvisoPagoManual } from '../AvisoPagoManual';
 import { PantallaBloqueo } from '../PantallaBloqueo';
 import type { AccesoComercial, EstadoCobroManual } from '../tipos';
@@ -19,11 +20,16 @@ const acceso = (estadoCobroManual: EstadoCobroManual): AccesoComercial => ({
   estadoCobroManual,
   periodoCobroActual: '2026-11-01',
   ultimoPeriodoPagado: null,
+  proximaRevisionEn: '2026-12-01T03:00:00.000Z',
 });
 
 const render = (contenido: React.ReactNode) => renderToStaticMarkup(<MemoryRouter>{contenido}</MemoryRouter>);
 
 describe('presentación del cobro manual', () => {
+  it('programa la revisión exactamente en el instante informado por el servidor', () => {
+    expect(demoraHastaRevision('2026-11-11T03:00:00.000Z', new Date('2026-11-11T02:59:59.000Z'))).toBe(1_000);
+    expect(demoraHastaRevision(null, new Date('2026-11-11T02:59:59.000Z'))).toBeNull();
+  });
   it.each([
     ['aviso_verde', 'aviso--ok'],
     ['aviso_amarillo', 'aviso--aviso'],

@@ -1,71 +1,57 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
+import { cargarAcceso } from '../api';
 import { estadoEfectivo, puedeExportar, puedeUsarKine } from '../estado';
-import type { AccesoComercial, EstadoComercial, ModalidadComercial } from '../tipos';
+import type { AccesoComercial, EstadoCobroManual } from '../tipos';
 
-const AHORA = new Date('2026-11-10T12:00:00.000Z');
-
-const acceso = (
-  estado: EstadoComercial,
-  cambios: Partial<AccesoComercial> = {},
-  modalidad: ModalidadComercial = 'general',
-): AccesoComercial => ({
-  modalidad,
-  precioArs: modalidad === 'preferencial' ? 15_000 : 50_000,
-  estado,
+const acceso = (estadoCobroManual: EstadoCobroManual): AccesoComercial => ({
+  modalidad: estadoCobroManual === 'exenta' ? 'exenta' : 'general',
+  precioArs: estadoCobroManual === 'exenta' ? 0 : 50_000,
+  estado: 'activa',
   accesoHasta: null,
   graciaHasta: null,
   eliminarDespuesDe: null,
   terminosAceptadosVersion: null,
   privacidadAceptadaVersion: null,
   aceptadoEn: null,
-  ...cambios,
+  estadoCobroManual,
+  periodoCobroActual: '2026-11-01',
+  ultimoPeriodoPagado: estadoCobroManual === 'al_dia' ? '2026-11-01' : null,
 });
 
 describe('estado comercial efectivo', () => {
   it.each([
-    ['pendiente', acceso('pendiente'), 'pendiente', false],
-    ['transición', acceso('transicion'), 'transicion', true],
-    ['activa', acceso('activa'), 'activa', true],
-    ['reintegrada', acceso('reintegrada'), 'bloqueada', false],
-    ['exenta', acceso('pendiente', {}, 'exenta'), 'exenta', true],
-  ] as const)('%s se resuelve como %s', (_nombre, cuenta, esperado, habilitada) => {
-    expect(estadoEfectivo(cuenta, AHORA)).toBe(esperado);
-    expect(puedeUsarKine(cuenta, AHORA)).toBe(habilitada);
+    ['exenta', true],
+    ['al_dia', true],
+    ['aviso_verde', true],
+    ['aviso_amarillo', true],
+    ['aviso_rojo', true],
+    ['bloqueada', false],
+  ] as const)('%s usa la decisión del servidor', (estado, habilitada) => {
+    const cuenta = acceso(estado);
+    expect(puedeUsarKine(cuenta, new Date('2030-01-01T00:00:00Z'))).toBe(habilitada);
+    expect(estadoEfectivo(cuenta, new Date('2030-01-01T00:00:00Z'))).toBe(
+      estado === 'exenta' ? 'exenta' : estado === 'bloqueada' ? 'bloqueada' : 'activa',
+    );
   });
 
-  it('mantiene la gracia un milisegundo antes y bloquea exactamente al vencer', () => {
-    const cuenta = acceso('gracia', { graciaHasta: AHORA.toISOString() });
-
-    expect(estadoEfectivo(cuenta, new Date(AHORA.getTime() - 1))).toBe('gracia');
-    expect(estadoEfectivo(cuenta, AHORA)).toBe('bloqueada');
+  it('permite exportar aun cuando el pago está bloqueado', () => {
+    expect(puedeExportar(acceso('bloqueada'))).toBe(true);
   });
 
-  it('mantiene una cancelación hasta el último milisegundo y bloquea en la frontera', () => {
-    const cuenta = acceso('cancelada', { accesoHasta: AHORA.toISOString() });
+  it('rechaza un estado manual desconocido devuelto por el servidor', async () => {
+    const sb = {
+      rpc: async () => ({
+        data: [{
+          modalidad: 'general', precio_ars: 50000, estado: 'activa', acceso_hasta: null,
+          gracia_hasta: null, eliminar_despues_de: null, terminos_aceptados_version: null,
+          privacidad_aceptada_version: null, aceptado_en: null, estado_cobro_manual: 'inventado',
+          periodo_cobro_actual: '2026-11-01', ultimo_periodo_pagado: null,
+        }],
+        error: null,
+      }),
+    } as unknown as SupabaseClient;
 
-    expect(estadoEfectivo(cuenta, new Date(AHORA.getTime() - 1))).toBe('cancelada_vigente');
-    expect(estadoEfectivo(cuenta, AHORA)).toBe('bloqueada');
-  });
-
-  it('bloquea de forma segura si falta o es inválida una fecha necesaria', () => {
-    expect(estadoEfectivo(acceso('gracia'), AHORA)).toBe('bloqueada');
-    expect(estadoEfectivo(acceso('cancelada', { accesoHasta: 'sin-fecha' }), AHORA)).toBe('bloqueada');
-  });
-
-  it('una reactivación ignora plazos anteriores de gracia, cancelación y eliminación', () => {
-    const reactivada = acceso('activa', {
-      graciaHasta: '2026-01-01T00:00:00.000Z',
-      accesoHasta: '2026-01-01T00:00:00.000Z',
-      eliminarDespuesDe: '2026-01-01T00:00:00.000Z',
-    });
-
-    expect(estadoEfectivo(reactivada, AHORA)).toBe('activa');
-    expect(puedeUsarKine(reactivada, AHORA)).toBe(true);
-  });
-
-  it('permite exportar en cualquier estado mientras la cuenta existe', () => {
-    const estados: EstadoComercial[] = ['pendiente', 'transicion', 'activa', 'gracia', 'cancelada', 'reintegrada'];
-
-    for (const estado of estados) expect(puedeExportar(acceso(estado))).toBe(true);
+    await expect(cargarAcceso(sb)).rejects.toThrow('estado de cobro manual inválido');
   });
 });

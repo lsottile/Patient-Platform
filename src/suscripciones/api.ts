@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AccesoComercial, EstadoComercial, ModalidadComercial } from './tipos';
+import type { AccesoComercial, EstadoCobroManual, EstadoComercial, ModalidadComercial } from './tipos';
 
 interface FilaAcceso {
   modalidad: unknown;
@@ -11,16 +11,24 @@ interface FilaAcceso {
   terminos_aceptados_version: unknown;
   privacidad_aceptada_version: unknown;
   aceptado_en: unknown;
+  estado_cobro_manual: unknown;
+  periodo_cobro_actual: unknown;
+  ultimo_periodo_pagado: unknown;
 }
 
 const MODALIDADES = new Set<ModalidadComercial>(['general', 'preferencial', 'exenta']);
 const ESTADOS = new Set<EstadoComercial>(['pendiente', 'transicion', 'activa', 'gracia', 'cancelada', 'reintegrada']);
+const ESTADOS_COBRO = new Set<EstadoCobroManual>(['exenta', 'al_dia', 'aviso_verde', 'aviso_amarillo', 'aviso_rojo', 'bloqueada']);
 const textoONull = (valor: unknown) => (typeof valor === 'string' ? valor : null);
 
 function convertir(fila: FilaAcceso): AccesoComercial {
   if (!MODALIDADES.has(fila.modalidad as ModalidadComercial) || !ESTADOS.has(fila.estado as EstadoComercial) || typeof fila.precio_ars !== 'number') {
     throw new Error('El servidor devolvió un estado de suscripción inválido');
   }
+  if (!ESTADOS_COBRO.has(fila.estado_cobro_manual as EstadoCobroManual)) {
+    throw new Error('El servidor devolvió un estado de cobro manual inválido');
+  }
+  if (typeof fila.periodo_cobro_actual !== 'string') throw new Error('El servidor devolvió un período de cobro inválido');
   return {
     modalidad: fila.modalidad as ModalidadComercial,
     precioArs: fila.precio_ars,
@@ -31,6 +39,9 @@ function convertir(fila: FilaAcceso): AccesoComercial {
     terminosAceptadosVersion: textoONull(fila.terminos_aceptados_version),
     privacidadAceptadaVersion: textoONull(fila.privacidad_aceptada_version),
     aceptadoEn: textoONull(fila.aceptado_en),
+    estadoCobroManual: fila.estado_cobro_manual as EstadoCobroManual,
+    periodoCobroActual: fila.periodo_cobro_actual,
+    ultimoPeriodoPagado: textoONull(fila.ultimo_periodo_pagado),
   };
 }
 

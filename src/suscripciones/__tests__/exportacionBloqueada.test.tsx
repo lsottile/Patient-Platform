@@ -29,6 +29,9 @@ const acceso: AccesoComercial = {
   terminosAceptadosVersion: '2026-10-26',
   privacidadAceptadaVersion: '2026-10-26',
   aceptadoEn: '2026-10-26T00:00:00.000Z',
+  estadoCobroManual: 'bloqueada',
+  periodoCobroActual: '2026-11-01',
+  ultimoPeriodoPagado: null,
 };
 
 const render = (contenido: React.ReactNode) => renderToStaticMarkup(<MemoryRouter>{contenido}</MemoryRouter>);
@@ -53,7 +56,6 @@ describe('salida de datos para cuentas bloqueadas', () => {
         acceso={acceso}
         repositorio={repositorio}
         email="profesional@example.com"
-        onPagar={() => undefined}
         onSalir={() => undefined}
       />,
     );
@@ -62,9 +64,11 @@ describe('salida de datos para cuentas bloqueadas', () => {
     expect(html).toMatch(/datos clínicos sensibles/i);
     expect(html).toMatch(/diez años/i);
     expect(html).toContain('lucianodsottile@gmail.com');
-    expect(html).toContain('Regularizar pago');
+    expect(html).toContain('Pago mensual pendiente');
     expect(html).toContain('Descargar respaldo completo');
     expect(html).toContain('Salir');
+    expect(html).not.toContain('Regularizar pago');
+    expect(html).not.toContain('Mercado Pago');
     expect(html).not.toContain('Pacientes');
     expect(html).not.toContain('Importar respaldo');
   });

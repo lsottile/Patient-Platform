@@ -4,6 +4,8 @@ export type EstadoComercial = 'pendiente' | 'transicion' | 'activa' | 'gracia' |
 
 export type EstadoEfectivo = 'pendiente' | 'transicion' | 'activa' | 'gracia' | 'cancelada_vigente' | 'bloqueada' | 'exenta';
 
+export type EstadoCobroManual = 'exenta' | 'al_dia' | 'aviso_verde' | 'aviso_amarillo' | 'aviso_rojo' | 'bloqueada';
+
 /** Vista pública del acceso propio; excluye identificadores internos de Mercado Pago. */
 export interface AccesoComercial {
   modalidad: ModalidadComercial;
@@ -15,4 +17,7 @@ export interface AccesoComercial {
   terminosAceptadosVersion: string | null;
   privacidadAceptadaVersion: string | null;
   aceptadoEn: string | null;
+  estadoCobroManual: EstadoCobroManual;
+  periodoCobroActual: string;
+  ultimoPeriodoPagado: string | null;
 }
